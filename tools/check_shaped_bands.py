@@ -30,8 +30,26 @@ dev = "cuda" if torch.cuda.is_available() else "cpu"
 
 
 def params_at_init(r50, b=1):
-    raw = sb.init_raw().to(dev)[None].expand(b, -1)
+    raw = sb.init_raw(True).to(dev)[None].expand(b, -1)
     return sb.decode_params(raw, torch.full((b,), r50, device=dev))
+
+
+def check_bounds():
+    print("0) bounded shape params: init decodes to INIT_SHAPE; raw in [-50, 50] stays inside BOUNDS")
+    r50 = torch.ones(1, device=dev)
+    init = sb.decode_params(sb.init_raw(True).to(dev)[None], r50, True)
+    worst = max(abs(init[n if n != "dot_scale" else "dot_r"].item() - sb.INIT_SHAPE[n]) for n in sb.PARAM_NAMES)
+    print(f"   max |decoded init - INIT_SHAPE| = {worst:.2e}")
+    raw = torch.cat([torch.full((1, 8), -50.0), torch.full((1, 8), 50.0), torch.randn(1000, 8) * 20]).to(dev)
+    out = sb.decode_params(raw, torch.ones(len(raw), device=dev), True)
+    for n in sb.PARAM_NAMES:
+        lo, hi, _ = sb.BOUNDS[n]
+        v = out[n if n != "dot_scale" else "dot_r"]
+        print(f"   {n:12} bounds [{lo:7.3f}, {hi:7.3f}]  seen [{v.min().item():7.3f}, {v.max().item():7.3f}]  "
+              f"ok {bool(v.min() >= lo - 1e-6 and v.max() <= hi + 1e-6)}")
+    un = sb.decode_params(sb.init_raw(False).to(dev)[None], r50, False)
+    print(f"   unbounded init still decodes to INIT_SHAPE: "
+          f"{max(abs(un[n if n != 'dot_scale' else 'dot_r'].item() - sb.INIT_SHAPE[n]) for n in sb.PARAM_NAMES):.2e}")
 
 
 def check_partition():
@@ -155,6 +173,7 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--images", default="data/test/denoise/kodak24")
     args = ap.parse_args()
+    check_bounds()
     check_partition()
     check_resolution()
     check_real_and_sum()

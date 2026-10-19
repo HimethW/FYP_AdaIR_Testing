@@ -25,7 +25,16 @@ The 4 bands (masks M_b, in this priority, so they partition the spectrum):
     rest   : everything else
     M_dot = D, M_star = S(1-D), M_lobe = L(1-D)(1-S), M_rest = (1-D)(1-S)(1-L)
 
-Shape params are not bounded yet (exp / identity, with numeric safety clamps only).
+Shape params are bounded (default): each one is squashed into a range around its
+starting value, value = lo + (hi - lo) * sigmoid(raw) (in log space for scale-like
+params), so no learning rate can drive the shapes into degenerate forms (with the
+earlier unbounded params and a high shape LR the masks collapsed: stars into straight
+lines, lobes rotated, the dot vanished in fre2/fre3). Shape params train at the normal
+learning rate (no multiplier). bounded=False gives the earlier unbounded version
+(exp / identity with numeric safety clamps only), kept for ablations.
+
+The frequency path (conv on I, FFT, masks, IFFT) always runs in fp32, also under
+autocast: torch.fft has no bf16 support and fp16 FFTs need power-of-2 sizes.
 
 Usage:
     from net.model import AdaIR
@@ -51,19 +60,46 @@ INIT_SHAPE = dict(dot_scale=1.0, star_theta=0.0, star_p=0.5, star_size=0.75, sta
                   lobe_vertex=0.6, lobe_curv=0.4, lobe_theta=0.0)
 _LOG_PARAMS = ("dot_scale", "star_p", "star_size", "star_aspect", "lobe_vertex", "lobe_curv")
 
+# Bounds (lo, hi, space) for the bounded version. Angles stay within +-22.5 deg (star,
+# 4-fold symmetric) and +-30 deg (lobe, rain streak angle); star stays a concave-to-diamond
+# star (p <= 1) of 40-95% of Nyquist; lobes keep their vertex at 40-90% of Nyquist; the dot
+# stays within 0.5-2x the 50%-energy radius.
+BOUNDS = dict(dot_scale=(0.5, 2.0, "log"), star_theta=(-math.pi / 8, math.pi / 8, "lin"),
+              star_p=(0.4, 1.0, "lin"), star_size=(0.4, 0.95, "lin"), star_aspect=(2 / 3, 1.5, "log"),
+              lobe_vertex=(0.4, 0.9, "lin"), lobe_curv=(0.1, 1.5, "log"),
+              lobe_theta=(-math.pi / 6, math.pi / 6, "lin"))
 
-def init_raw():
-    return torch.tensor([math.log(INIT_SHAPE[n]) if n in _LOG_PARAMS else INIT_SHAPE[n] for n in PARAM_NAMES])
+
+def init_raw(bounded=True):
+    """Raw SGB base that decodes to INIT_SHAPE."""
+    if not bounded:
+        return torch.tensor([math.log(INIT_SHAPE[n]) if n in _LOG_PARAMS else INIT_SHAPE[n] for n in PARAM_NAMES])
+    raw = []
+    for n in PARAM_NAMES:
+        lo, hi, space = BOUNDS[n]
+        v = INIT_SHAPE[n]
+        if space == "log":
+            lo, hi, v = math.log(lo), math.log(hi), math.log(v)
+        t = (v - lo) / (hi - lo)
+        raw.append(math.log(t / (1 - t)))
+    return torch.tensor(raw)
 
 
-def decode_params(raw, r50):
+def decode_params(raw, r50, bounded=True):
     """raw: (B, 8) from the SGB; r50: (B,) 50%-energy radius. Returns dict of (B,) tensors."""
     p = dict(zip(PARAM_NAMES, raw.unbind(1)))
-    out = {n: p[n].exp() if n in _LOG_PARAMS else p[n] for n in PARAM_NAMES}
-    # numeric safety only (keeps powers / divisions finite), not shape bounds
-    out["star_p"] = out["star_p"].clamp(0.1, 10.0)
-    out["star_size"] = out["star_size"].clamp(min=1e-3)
-    out["star_aspect"] = out["star_aspect"].clamp(1e-2, 1e2)
+    if bounded:
+        out = {}
+        for n in PARAM_NAMES:
+            lo, hi, space = BOUNDS[n]
+            t = torch.sigmoid(p[n])
+            out[n] = (math.log(lo) + (math.log(hi) - math.log(lo)) * t).exp() if space == "log" else lo + (hi - lo) * t
+    else:
+        out = {n: p[n].exp() if n in _LOG_PARAMS else p[n] for n in PARAM_NAMES}
+        # numeric safety only (keeps powers / divisions finite), not shape bounds
+        out["star_p"] = out["star_p"].clamp(0.1, 10.0)
+        out["star_size"] = out["star_size"].clamp(min=1e-3)
+        out["star_aspect"] = out["star_aspect"].clamp(1e-2, 1e2)
     out["dot_r"] = r50 * out.pop("dot_scale")
     return out
 
@@ -146,7 +182,7 @@ def energy_radius(spec_centred, share=0.5):
 class ShapeGenerator(nn.Module):
     """SGB: [GAP(P), STD(P)] -> 1x1 -> GELU -> 1x1 -> + learned base -> 8 raw shape params."""
 
-    def __init__(self, dim, hidden=None):
+    def __init__(self, dim, hidden=None, bounded=True):
         super().__init__()
         hidden = hidden or max(dim // 8, 8)
         self.body = nn.Sequential(
@@ -156,7 +192,7 @@ class ShapeGenerator(nn.Module):
         )
         nn.init.zeros_(self.body[-1].weight)
         nn.init.zeros_(self.body[-1].bias)
-        self.base = nn.Parameter(init_raw())
+        self.base = nn.Parameter(init_raw(bounded))
 
     def forward(self, p):
         stats = torch.cat([p.mean((2, 3), keepdim=True), p.std((2, 3), keepdim=True)], 1)
@@ -196,11 +232,12 @@ class BandSelfAttention(nn.Module):
 class FreModuleBands(nn.Module):
     """AFLB with 4 shaped bands (FMiM*) and band self-attention (BSA)."""
 
-    def __init__(self, dim, num_heads, bias, in_dim=3, tau=DEFAULT_TAU, bsa_heads=4):
+    def __init__(self, dim, num_heads, bias, in_dim=3, tau=DEFAULT_TAU, bsa_heads=4, bounded=True):
         super().__init__()
         self.tau = tau
+        self.bounded = bounded
         self.conv1 = nn.Conv2d(in_dim, dim, kernel_size=3, stride=1, padding=1, bias=False)
-        self.sgb = ShapeGenerator(dim)
+        self.sgb = ShapeGenerator(dim, bounded=bounded)
         self.band_ca = nn.ModuleList([Chanel_Cross_Attention(dim, num_head=num_heads, bias=bias) for _ in BANDS])
         self.bsa = BandSelfAttention(dim, len(BANDS), bsa_heads)
         self.merge = nn.Conv2d(dim, dim, kernel_size=1)
@@ -221,14 +258,18 @@ class FreModuleBands(nn.Module):
         return out * self.para1 + y * self.para2
 
     def split(self, x):
-        """|IFFT(M_b * F)| for the 4 bands, each (B, C, h, w)."""
+        """|IFFT(M_b * F)| for the 4 bands, each (B, C, h, w). Always fp32 (see module doc)."""
+        with torch.autocast(device_type=x.device.type, enabled=False):
+            return self._split(x.float())
+
+    def _split(self, x):
         p = self.conv1(x)
         h, w = p.shape[-2:]
         spec = torch.fft.fft2(p, norm='forward', dim=(-2, -1))
         spec = torch.roll(spec, shifts=(h // 2, w // 2), dims=(2, 3))
 
         r50 = energy_radius(spec)
-        params = decode_params(self.sgb(p), r50)
+        params = decode_params(self.sgb(p), r50, self.bounded)
         masks = band_masks(params, h, w, self.tau)  # (B, 4, h, w)
 
         # kept for logging / mask plots
@@ -245,7 +286,7 @@ class FreModuleBands(nn.Module):
 AFLBS = ("fre1", "fre2", "fre3")
 
 
-def apply(model, tau=DEFAULT_TAU, bsa_heads=4):
+def apply(model, tau=DEFAULT_TAU, bsa_heads=4, bounded=True):
     """Replace fre1/fre2/fre3 of an AdaIR model with FreModuleBands (new, untrained). Returns model."""
     for name in AFLBS:
         old = getattr(model, name, None)
@@ -253,6 +294,6 @@ def apply(model, tau=DEFAULT_TAU, bsa_heads=4):
             raise ValueError(f"shaped_bands.apply: model has no {name} (built with decoder=False?)")
         new = FreModuleBands(dim=old.conv1.out_channels, num_heads=old.channel_cross_agg.num_head,
                              bias=old.channel_cross_agg.q.bias is not None, in_dim=old.conv1.in_channels,
-                             tau=tau, bsa_heads=bsa_heads)
+                             tau=tau, bsa_heads=bsa_heads, bounded=bounded)
         setattr(model, name, new.to(old.para1.device))
     return model
