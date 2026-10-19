@@ -273,3 +273,42 @@ crossing lines, lobes rotated, the dot vanished in fre2/fre3 and covered 39% in 
   0.015 dB on every Kodak image with the released weights. Decision for now: evaluation always fp32;
   training precision decided by a matched short A/B run once the datasets are in (fp32 + gradient
   accumulation to batch 32 vs bf16 batch 8 + accumulation).
+
+### Datasets (`tools/prepare_data.py`, `tools/mixtures.py`, `tools/build_mixtures.py`)
+What the old runs used (from the deck): the AdaIR authors' 3-task data (noise: BSD400 + WED -> BSD68;
+rain: Rain100L; haze: RESIDE-beta OTS -> SOTS outdoor), mixtures haze+noise sigma 25, rain+noise sigma 25,
+haze+rain ("our test") and haze+rain from **CDD-11** (deck slides 88/89/96/98: "Haze + rain (CDD-11 test)",
+"v_selfattention (+ mixtures, CDD-11)"), plus O-HAZE / NH-HAZE and a SOTS split into unseen scenes
+(424) and "SOTS training copies".
+
+Sources (researched by a subagent; every zip's file list checked over HTTP Range before downloading):
+
+| Data | Source | Size | Notes |
+|---|---|---|---|
+| BSD400 | INSTALL.md Drive `1idKFDkAHJGAFDn1OyXZxsTbOSBx9GS8N`, fallback HF mirror `laoduanaaa/Image_Restoration_Datasets` | 29 MB | Drive gave quota errors, mirror used (same size / file list). **Renamed to a<id>.jpg**: data_dir/noisy/denoise.txt lists `a100007.jpg`, the zip has `100007.jpg`; as shipped all 400 BSD images are silently dropped by the loader (AdaIR issue #4) |
+| WED | INSTALL.md Drive `1e62XGdi5c6IbvkZ70LFq0KLRhFvih7US`, same HF mirror fallback | 2.2 GB | 4,744 .bmp, names match denoise.txt |
+| Rain100L train | INSTALL.md Drive `1tiCYr_-ptzwYlRaQOtsI-7seXkrNo-bs` (RainTrainL.zip) | 119 MB | rain-N / norain-N -> Derain/rainy, Derain/gt (200 pairs) |
+| Rain100L test | INSTALL.md Drive `1-3Y7TLZ5EpYYZmFLkRKjV508kcBeibjU` | 53 MB | target renamed norain-NNN -> rain-NNN (test loader needs identical names) |
+| Urban100 | INSTALL.md Drive `1UlNulSoyflrEObwu19BBlT7f2_Wxycga` | 135 MB | |
+| CBSD68 | github.com/clausmichele/CBSD68-dataset, `CBSD68/original` (sparse checkout) | 5 MB | |
+| OTS (RESIDE-beta) | official Box share `25idwrsn890w03grdr6pls28cy38r91i`: part1-4 + clear.zip | 11.9 GB | exactly the 72,135 hazy in hazy_outside.txt + 2,061 clear; clear kept as .jpg (loader reuses the hazy extension) |
+| SOTS outdoor | official Box share `uqvnbfo68kns1210z5k5j17cvazavcd1`, SOTS.zip | 435 MB | 500 hazy, 492 gt (<id>.png) |
+| O-HAZE / NH-HAZE | ETH NTIRE18 / NTIRE20 official zips | 573 / 331 MB | re-laid out to input/ + target/<NN>.png (O-HAZE GT jpg -> png); usual test splits 41-45 / 51-55 |
+| CDD-11 | official HF `gy65896/CDD-11` (OneRestore) | 22.4 + 3.8 GB zips | only `haze_rain` + `clear` read over HTTP Range (1,183 train + 200 test pairs, ~4.2 GB) |
+
+`tools/prepare_data.py` is resumable (each step checks its output), downloads to data/_downloads,
+extracts to data/_extract, deletes zips after moving. Bug found and fixed on the first run: the extract
+folder for Urban100 was itself called "urban100", so the search returned it and the images were deleted
+with the temp folder; `find_dir` now skips the root.
+
+Mixtures (choices; the old synthesis code is lost, so these are documented and reproducible):
+- haze + noise: OTS / SOTS hazy + Gaussian noise (AdaIR's convention: clip, uint8). Test: SOTS + sigma 25.
+- rain + noise: Rain100L rainy + Gaussian noise. Test: Rain100L test + sigma 25.
+- haze + rain ("ours"): the Rain100L streak layer max(rainy - clean, 0) added on top of a real OTS / SOTS
+  hazy image (rain is near the camera, in front of the haze), GT = clear. Uses OTS's depth-based haze
+  rather than an invented haze. Test: SOTS hazy + Rain100L *test* streaks (no train streaks in the test).
+- haze + rain (CDD-11): their pairs.
+- Test sets are written once (numpy seed 0, PNG, identical names in input/ and target/); training
+  mixtures will be generated on the fly by the training loader with the same functions.
+- SOTS / OTS overlap: each SOTS outdoor gt is matched to its most similar OTS clear image (32x32 grey
+  cosine, confirmed at 128x128); the seen list goes to `splits/sots_outdoor_seen_in_ots.txt`.
