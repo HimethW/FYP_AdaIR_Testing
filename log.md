@@ -436,3 +436,11 @@ On Aberdeen only the user's workspaces/Himeth folder may be used; the resource c
   at batch 4, fp32) until that job ends. Expected speed vs qbits' RTX 4080 SUPER: fp32 ~11 vs ~52 TFLOPS, memory
   bandwidth 448 vs 736 GB/s -> roughly 2.5-4x slower (estimate, not measured), i.e. ~7-12 days for 20 epochs of
   the baseline vs ~3 days on qbits.
+- Elgin (read-only check via its saved SSH connection, 2026-10-20): 3x Quadro RTX 5000 16 GB, all idle (GPU2 carries
+  another user's desktop Xorg, avoid it); 40 threads, 93 GB RAM; account minura, /home/minura/Himeth exists (empty);
+  but `/` (which holds home) has only **12 GB free (99% full, shared)**; the only other mount is an NFS share that is
+  not ours. The baseline needs ~26 GB there (training data 18 GB: OTS 12, WED + BSD400 3.1, CDD-11 train 3.4, rain
+  0.1; env 5.8 GB, mostly torch + bundled CUDA libs; released ckpt 0.3; run checkpoints ~1-2 GB). Test sets can stay
+  on qbits (evaluate there), and WED as lossless PNG would save ~1.5 GB, but it still doesn't fit, and filling a shared
+  disk to 100% would break other people's work and our multi-day run. Same GPU model as Aberdeen's, so ~7-12 days for
+  20 epochs (estimate). The baseline on qbits after ours (~day 6) also finishes sooner than either RTX 5000 server.
