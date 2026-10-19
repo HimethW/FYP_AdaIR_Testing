@@ -444,3 +444,13 @@ On Aberdeen only the user's workspaces/Himeth folder may be used; the resource c
   on qbits (evaluate there), and WED as lossless PNG would save ~1.5 GB, but it still doesn't fit, and filling a shared
   disk to 100% would break other people's work and our multi-day run. Same GPU model as Aberdeen's, so ~7-12 days for
   20 epochs (estimate). The baseline on qbits after ours (~day 6) also finishes sooner than either RTX 5000 server.
+
+### DECISION (2026-10-20): both runs on qbits, one after the other
+Agreed with the user after checking Aberdeen and Elgin (above): our model first, then the original-AdaIR baseline,
+both on qbits' RTX 4080 SUPER (same GPU, same true-fp32 settings, so the comparison is fully matched).
+1. Ours: `--variant shaped`, released backbone (+ para2), fresh AFLBs; DCPT stage with the backbone frozen, then
+   restoration fine-tuning of everything, L1 + 0.1 FFT, aio3_mix, ~20 epochs. ~3 days.
+2. Baseline: `--variant original`, full released checkpoint, L1, aio3_mix, the same ~20 epochs. ~3 days.
+Expected: ours done ~day 3, baseline ~day 6 after launch. Both launched detached (`setsid nohup`), auto-resume on
+restart. Iteration counts, LR schedule (planned lr 1e-4, short warmup, cosine to 1e-6, same for both) and the DCPT
+stage length are fixed at launch. Not started: the user has more changes to give first.
