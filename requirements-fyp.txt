@@ -1,0 +1,25 @@
+# Environment used on qbits (RTX 4080 SUPER, driver 580 / CUDA 13.0), 2026-10-19.
+# The upstream env.yaml pins PyTorch 1.13 + CUDA 11.6, which has no proper sm_89 (Ada) support.
+#
+#   conda create -n adair python=3.10
+#   conda activate adair
+#   pip install -r requirements-fyp.txt
+#
+--extra-index-url https://download.pytorch.org/whl/cu121
+torch==2.4.1+cu121
+torchvision==0.19.1+cu121
+numpy==1.23.5           # scikit-video 1.1.11 uses np.float / np.int (removed in 1.24)
+scipy==1.13.1           # utils/imresize.py imports scipy.ndimage.filters / measurements (deprecated)
+scikit-image==0.21.0
+scikit-video==1.1.11
+lightning==2.2.5
+setuptools==69.5.1      # lightning 2.2 imports pkg_resources (removed in newer setuptools)
+einops==0.8.2
+opencv-python==4.8.1.78
+matplotlib==3.10.9
+pillow==12.3.0
+tqdm==4.70.1
+wandb==0.31.0
+tensorboard==2.21.0
+ptflops==0.7.5
+timm==1.0.30

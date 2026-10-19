@@ -158,3 +158,15 @@ cython_debug/
 #  and can be added to the global gitignore or merged into this file.  For a more nuclear
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
+
+# FYP: datasets, checkpoints and run outputs live on Google Drive, not in git
+data/
+ckpt/
+*.ckpt
+*.pth
+*.pt
+output/
+AdaIR_results/
+logs/
+lightning_logs/
+wandb/
