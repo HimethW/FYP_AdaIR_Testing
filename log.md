@@ -68,3 +68,8 @@ Consequences:
 - `.gitignore` excludes `data/`, `ckpt/`, `*.ckpt|*.pth|*.pt`, `output/`, `AdaIR_results/`, logs, wandb.
   Datasets and checkpoints go to Google Drive instead (link to be added here).
 - Added this log and results.md.
+- Commit identity: the first push had commits authored with the Claude account's email
+  (Achintha Hathurusingha's), so GitHub attributed them to `achintha-hathurusingha`. Fixed by setting
+  the repo-local identity to `Himeth Walgampaya <103624187+HimethW@users.noreply.github.com>`,
+  re-authoring the three commits and force-pushing over the first push. All commits from here on use
+  this identity.
