@@ -112,3 +112,49 @@ Script checks (results.md A4, figure `figures/mask_check_adair3d.png`):
 4. Dropping the fix into the released weights changes nothing: Kodak24 sigma 25 PSNR 32.53 both
    (max per-image diff 0.001 dB). The cutoffs come out ~0.5 for every image (untrained rate_conv).
    So the fix only pays off with training, which fits the plan (train from scratch at the end).
+
+### New AFLB: 4 shaped bands + band self-attention (`patches/shaped_bands.py`)
+Architecture from the planning diagram ("AdaIR with the modified AFLB*"): FMiM* with 4 shaped masks,
+one CA per band, BSA replacing FMoM's H-L / L-H. Read the AdaIR paper (arXiv 2403.14614) first: its mask
+is `M_l[H/2 - aH/k : H/2 + aH/k]` with k = 128, so the empty mask is in the paper's own formula; Q of each
+band CA comes from the band, K/V from X; the final CA takes Q from X and K/V from X_m. Kept that wiring.
+
+Design (choices not fixed by the diagram are marked *):
+- Shapes on normalised centred frequency (0 = DC, 1 = Nyquist), soft edges sigmoid(distance / tau),
+  tau = 0.05 (as mask_fix). Same meaning at every AFLB resolution.
+- dot: disc, radius = r50 * exp(s0). r50 = radius holding 50% of the non-DC energy of this image's
+  feature spectrum, computed per image and detached*; s0 learned. Starts exactly at the 50% radius
+  and follows the image (noise pushes it out).
+- star: rotated superellipse, params theta, curvature p, size, aspect. Start* p = 0.5 (concave
+  4-point star), size 0.75, aspect 1, theta 0.
+- lobe: side lobes |v'| >= vertex + curv * u'^2, rotated by theta. Start* vertex 0.6, curv 0.4
+  (lobes left/right, arms reach the corners, as in the planning picture).
+- rest = everything else. Priority dot > star > lobe*, so M_dot = D, M_star = S(1-D),
+  M_lobe = L(1-D)(1-S), M_rest = (1-D)(1-S)(1-L): the 4 masks sum to exactly 1.
+- Masks are averaged with their DFT mirror (k -> -k). Without this, rotated shapes on even-size
+  maps gave complex bands (imag/real ~0.1) because the Nyquist row/column has no +1 partner.
+- SGB: [GAP(P), STD(P)] -> 1x1 (2C -> C/8) -> GELU -> 1x1 (-> 8, zero-init*) -> + learned base
+  (initialised to the starting shapes*). Every image starts with the base shapes.
+- Shape params decoded with exp (positive ones) / identity (angles), numeric safety clamps only
+  (p in [0.1, 10], aspect in [0.01, 100]). Not bounded yet.
+- Bands: |IFFT(M_b * F)| (abs, as the original), then one Chanel_Cross_Attention per band
+  (q = band, kv = X).
+- BSA: + band embedding -> LN (WithBias) -> shared 1x1 Q/K/V -> per pixel, per head (4 heads)
+  softmax over the 4 bands -> 1x1 (zero-init*) -> + residual. Starts as identity.
+- sum of bands -> 1x1 -> X_m -> CA(q = X, kv = X_m) -> out * para1 + X * para2 (para1 = 0 init,
+  as original). FreRefine (H-L / L-H), and the unused `conv` / `score_gen` of the original, dropped.
+- `shaped_bands.apply(model)` swaps fre1/2/3 for new untrained FreModuleBands; net/model.py untouched.
+- Each AFLB keeps `last_params`, `last_r50`, `last_band_area`, and BSA keeps `last_attn` (B x 4 x 4
+  mean mixing) for logging and plots.
+
+Checks (`tools/check_shaped_bands.py`, results.md A5): partition exact (|sum - 1| ~1e-7), bands real
+and summing back to P, band areas identical from 32 to 512 px, BSA identity at init, every new parameter
+gets gradient, 31.13M params (+2.35M), train step +11%. Figures (`tools/plot_bands.py`):
+`figures/bands_start_masks.png` (starting shapes on real feature spectra), `figures/bands_start_kodim.png`
+(what each band passes).
+Notes:
+- Batch 4 at 128x128 already takes 12.5 GB for fwd+bwd on the 16 GB card (original AdaIR too); the
+  paper used batch 32. Training here will need mixed precision and/or gradient accumulation.
+- The star band picks up the FFT wrap-around edge (bright frame): the image-border discontinuity puts
+  energy along the u/v axes, where the star's arms are. Same in the original AdaIR. Possible later
+  fix: window or pad before the FFT. Not changed.

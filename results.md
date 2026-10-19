@@ -272,3 +272,42 @@ Student work is the student team's; kept here as the reference the teacher has t
 ### Note on "original AdaIR" haze numbers
 They differ between tables because the test sets differ: 22.80 (B2, own synthetic haze),
 31.05 (B3/B4, held-out haze set), 30.06-30.07 (B7/B8, SOTS outdoor). Compare within a table only.
+
+### A5. Shaped bands + BSA (`patches/shaped_bands.py`), untrained (2026-10-19)
+`python tools/check_shaped_bands.py`, figures from `python tools/plot_bands.py`
+(`figures/bands_start_masks.png`, `figures/bands_start_kodim.png`).
+
+Masks (random perturbed shapes, 4 samples): min 0, max 1.0000, max |sum - 1| = 1.2e-7 at 16x16, 33x47,
+64x96, 256x384. Bands: max |imag| / max |real| <= 1.8e-7, max |sum of bands - P| <= 1.4e-6 (before the
+DFT-mirror symmetrisation imag/real was 0.13 at 16x16 and 0.09 at 64x96). BSA at init vs identity: 0.0.
+All new parameters get gradients after one Adam step.
+
+Band areas at the starting shapes (r50 = 0.10):
+
+| Map | dot | star | lobe | rest |
+|---|---|---|---|---|
+| 16x16 | 1.4% | 10.9% | 26.1% | 61.6% |
+| 32x32 | 1.4% | 9.1% | 26.5% | 63.0% |
+| 64x64 | 1.4% | 8.5% | 26.7% | 63.4% |
+| 128x128 to 512x512 | 1.4% | 8.2-8.3% | 26.8% | 63.6% |
+
+(Old v_selfattention_improved fre3, slide 99: 1 / 11 / 29 / 60%.)
+
+Cost (RTX 4080 SUPER, fp32):
+
+| Model | Params | Train step 4x3x128x128 fwd+bwd | Train memory | Inference 1x3x512x768 | Inference memory |
+|---|---|---|---|---|---|
+| original AdaIR | 28.78M | 239 ms | 12.53 GB | 474 ms | 3.55 GB |
+| shaped bands + BSA | 31.13M | 267 ms | 13.15 GB | 510 ms | 3.57 GB |
+
+Real images (Kodak24, untrained model, starting shapes): mean 50%-energy radius r50 and band areas
+dot / star / lobe / rest per AFLB:
+
+| Noise sigma | fre1 r50 | fre1 areas | fre2 r50 | fre2 areas | fre3 r50 | fre3 areas |
+|---|---|---|---|---|---|---|
+| 0 | 0.128 | 2.4 / 7.7 / 26.7 / 63.2% | 0.068 | 1.1 / 8.6 / 26.8 / 63.6% | 0.029 | 0.5 / 9.0 / 26.8 / 63.7% |
+| 15 | 0.133 | 2.6 / 7.6 / 26.7 / 63.2% | 0.073 | 1.2 / 8.5 / 26.8 / 63.6% | 0.030 | 0.6 / 9.0 / 26.8 / 63.7% |
+| 25 | 0.145 | 3.0 / 7.3 / 26.7 / 63.0% | 0.084 | 1.4 / 8.3 / 26.8 / 63.5% | 0.034 | 0.6 / 9.0 / 26.8 / 63.7% |
+| 50 | 0.214 | 5.6 / 6.0 / 26.7 / 61.7% | 0.159 | 3.7 / 6.9 / 26.8 / 62.6% | 0.061 | 1.2 / 8.5 / 26.8 / 63.5% |
+
+The dot follows the image: noise adds high-frequency energy, so the 50% radius grows.
