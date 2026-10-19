@@ -23,3 +23,4 @@ wandb==0.31.0
 tensorboard==2.21.0
 ptflops==0.7.5
 timm==1.0.30
+gdown==5.2.0            # downloading checkpoints / datasets from Google Drive
