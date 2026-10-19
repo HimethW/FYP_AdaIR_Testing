@@ -280,81 +280,98 @@ def main():
     acc = {}
     t0, n_img = time.time(), 0
     model.train()
-    while step < args.iters and not stop["flag"]:
-        if frozen and args.freeze_backbone > 0 and step >= args.freeze_backbone:
-            frozen = False
-            set_backbone_frozen(False)
-        for o in optimizers:
-            o.zero_grad(set_to_none=True)
-        for _ in range(args.accum):
-            b = next(stream)
-            lq, gt = b["lq"].to(device, non_blocking=True), b["gt"].to(device, non_blocking=True)
-            with autocast:
-                if dcpt is not None:
-                    loss, parts = dcpt(lq, gt, b["label"].to(device))
-                else:
-                    out = model(lq)
-                    if loss_fn is not None:
-                        loss, parts = loss_fn(out.float(), gt)
+    state = {"updating": False}
+    try:
+        while step < args.iters and not stop["flag"]:
+            if frozen and args.freeze_backbone > 0 and step >= args.freeze_backbone:
+                frozen = False
+                set_backbone_frozen(False)
+            for o in optimizers:
+                o.zero_grad(set_to_none=True)
+            for _ in range(args.accum):
+                b = next(stream)
+                lq, gt = b["lq"].to(device, non_blocking=True), b["gt"].to(device, non_blocking=True)
+                with autocast:
+                    if dcpt is not None:
+                        loss, parts = dcpt(lq, gt, b["label"].to(device))
                     else:
-                        loss = torch.nn.functional.l1_loss(out.float(), gt)
-                        parts = {"l_pix": loss.detach()}
-            (loss / args.accum).backward()
-            parts["loss"] = loss.detach()
-            for k, v in parts.items():
-                acc.setdefault(k, []).append(float(v))
-            n_img += lq.shape[0]
-        if args.clip > 0:
-            torch.nn.utils.clip_grad_norm_([p for p in model.parameters() if p.requires_grad], args.clip)
-        for o in optimizers:
-            o.step()
-        for s in schedulers:
-            s.step()
-        if ema is not None:
-            ema.update(model)
-        step += 1
+                        out = model(lq)
+                        if loss_fn is not None:
+                            loss, parts = loss_fn(out.float(), gt)
+                        else:
+                            loss = torch.nn.functional.l1_loss(out.float(), gt)
+                            parts = {"l_pix": loss.detach()}
+                (loss / args.accum).backward()
+                parts["loss"] = loss.detach()
+                for k, v in parts.items():
+                    acc.setdefault(k, []).append(float(v))
+                n_img += lq.shape[0]
+            state["updating"] = True
+            if args.clip > 0:
+                torch.nn.utils.clip_grad_norm_([p for p in model.parameters() if p.requires_grad], args.clip)
+            for o in optimizers:
+                o.step()
+            for s in schedulers:
+                s.step()
+            if ema is not None:
+                ema.update(model)
+            step += 1
+            state["updating"] = False
 
-        if step % args.log_every == 0 or step == 1:
-            dt = time.time() - t0
-            m = {f"train/{k}": float(np.mean(v)) for k, v in acc.items()}
-            m["lr"] = schedulers[0].get_last_lr()[0]
-            m["img_per_s"] = n_img / dt
-            m["epoch"] = epoch
-            m.update(shape_stats(model))
-            eta = (args.iters - step) * args.batch * args.accum / max(m["img_per_s"], 1e-6)
-            log(f"step {step}/{args.iters} ep {epoch} " + " ".join(f"{k.split('/')[-1]} {v:.4g}" for k, v in m.items()
-                if k.startswith("train/")) + f" lr {m['lr']:.2e} {m['img_per_s']:.1f} img/s "
-                f"mem {torch.cuda.max_memory_allocated() / 2 ** 30:.1f}GB eta {eta / 3600:.1f}h")
-            write_metrics(m)
-            acc, t0, n_img = {}, time.time(), 0
+            if step % args.log_every == 0 or step == 1:
+                dt = time.time() - t0
+                m = {f"train/{k}": float(np.mean(v)) for k, v in acc.items()}
+                m["lr"] = schedulers[0].get_last_lr()[0]
+                m["img_per_s"] = n_img / dt
+                m["epoch"] = epoch
+                m.update(shape_stats(model))
+                eta = (args.iters - step) * args.batch * args.accum / max(m["img_per_s"], 1e-6)
+                log(f"step {step}/{args.iters} ep {epoch} " + " ".join(f"{k.split('/')[-1]} {v:.4g}" for k, v in m.items()
+                    if k.startswith("train/")) + f" lr {m['lr']:.2e} {m['img_per_s']:.1f} img/s "
+                    f"mem {torch.cuda.max_memory_allocated() / 2 ** 30:.1f}GB eta {eta / 3600:.1f}h")
+                write_metrics(m)
+                acc, t0, n_img = {}, time.time(), 0
 
-        if step % args.val_every == 0 or step == args.iters:
-            if dcpt is not None:
-                top1, per = dcpt_accuracy(dcpt, sets, args.val_n, device)
-                log(f"val dcpt top-1 {top1:.3f} " + " ".join(f"{k} {v:.2f}" for k, v in per.items()))
-                write_metrics({"val/dcpt_top1": top1, **{f"val/dcpt_{k}": v for k, v in per.items()}})
-            else:
-                net = model
-                if ema is not None:
-                    net = build_model(args.variant, amp_safe=args.precision == "bf16").to(device)
-                    net.load_state_dict(ema.state)
-                log(f"val ({'ema' if ema else 'model'}, first {args.val_n} images per set):")
-                res = evaluate(net, sets, val_names, device=device, limit=args.val_n, log=log)
-                write_metrics({f"val/{k}_psnr": v["psnr"] for k, v in res.items()})
-                if net is not model:
-                    del net
-                model.train()
-            t0 = time.time()
+            if step % args.val_every == 0 or step == args.iters:
+                if dcpt is not None:
+                    top1, per = dcpt_accuracy(dcpt, sets, args.val_n, device)
+                    log(f"val dcpt top-1 {top1:.3f} " + " ".join(f"{k} {v:.2f}" for k, v in per.items()))
+                    write_metrics({"val/dcpt_top1": top1, **{f"val/dcpt_{k}": v for k, v in per.items()}})
+                else:
+                    net = model
+                    if ema is not None:
+                        net = build_model(args.variant, amp_safe=args.precision == "bf16").to(device)
+                        net.load_state_dict(ema.state)
+                    log(f"val ({'ema' if ema else 'model'}, first {args.val_n} images per set):")
+                    res = evaluate(net, sets, val_names, device=device, limit=args.val_n, log=log)
+                    write_metrics({f"val/{k}_psnr": v["psnr"] for k, v in res.items()})
+                    if net is not model:
+                        del net
+                    model.train()
+                t0 = time.time()
 
-        if step % args.ckpt_every == 0 or step == args.iters or stop["flag"]:
-            checkpoint(last)
-        if step % args.keep_every == 0:
-            checkpoint(os.path.join(run, f"iter_{step:07d}.pt"))
+            if step % args.ckpt_every == 0 or step == args.iters or stop["flag"]:
+                checkpoint(last)
+            if step % args.keep_every == 0:
+                checkpoint(os.path.join(run, f"iter_{step:07d}.pt"))
+    except RuntimeError:
+        # A signal to the whole process group (e.g. a shutdown) also kills the data-loader workers, and the
+        # loader raises that wherever the main process happens to be. If a stop was requested, the model is at
+        # the last completed step unless an optimiser update was in progress: then keep the previous checkpoint.
+        if not stop["flag"]:
+            raise
+        signal.signal(signal.SIGCHLD, signal.SIG_DFL)  # no more dead-worker errors during the final save
+        if state["updating"]:
+            log(f"stopped during a parameter update; keeping the last saved checkpoint, not step {step}")
+            return 3
+        log(f"data workers stopped; saving step {step}")
 
+    stream.close()  # shuts the data-loader workers down cleanly
     checkpoint(last)
     log(f"stopped at step {step}" if stop["flag"] else f"finished {step} iterations")
     metrics_f.close()
     tb.close()
+    return 3 if stop["flag"] else 0  # non-zero when interrupted, so chained stages don't continue
 
 
 if __name__ == "__main__":

@@ -472,3 +472,24 @@ Checked by rendering with headless Chromium (installed in Himeth/.tmp + .cache; 
 Himeth/.tmp/libs, nothing installed system-wide) on two demo runs at 1280 px light/dark and 390 px: no JS errors.
 Fixed after looking: faint raw-loss lines were drawn outside their charts (not in the y-range) -> included + clipped;
 number formats; epochs < 0.01 shown as 0.00; time-axis ticks snapped to round clock times.
+
+### LAUNCH (2026-10-20): our model, 20 epochs, on qbits (`scripts/run_ours.sh`)
+User: "target 20 epochs on both baseline and ours; start the training for our architecture".
+Exact settings (both stages: shaped variant, bounded shapes, aio3_mix = 159,567 crops / epoch, 128 crops, true fp32,
+TF32 off, AdamW, cosine to the min LR, seed 0):
+- Stage 1 `ours_dcpt` (DCPT warm-up): 5,000 iters x (2 x 16) = 160,000 crops = 1.0 epoch; released backbone + para2,
+  fresh AFLBs, backbone frozen the whole stage (12.45M trainable: AFLBs + classifier); net lr 2e-4 wd 0, classifier
+  lr 5e-5 wd 1e-4, warmup 1/12; focal + L1(clean); DCPT top-1 checked every 500 iters. Measured 7.2 img/s, 8.2 GB
+  -> ~6.2 h.
+- Stage 2 `ours_ft` (restoration): 99,730 iters x (4 x 8) = 3,191,360 crops = 20.0 epochs; init = stage-1 weights;
+  everything trains; L1 + 0.1 FFT (unnormalised, SFNet convention); lr 1e-4, wd 0.01, 2% warmup, cosine to 1e-6;
+  EMA 0.999 kept alongside (validation uses EMA; raw weights also saved); validation on 10 images x 7 sets every
+  5,000 iters; checkpoints every 1,000 iters, snapshots every 20,000. Measured 13.3 img/s, 13.6 GB -> ~67 h.
+- Total ~3 days. The baseline (original, full released weights, L1, same 20 epochs and schedule, EMA too) follows on
+  qbits after this finishes.
+Robustness fixes made before launch (tested): an interrupted run now exits with code 3 so stage 2 can't start from an
+unfinished stage 1; a SIGTERM to the whole process group (e.g. shutdown) used to kill the data-loader workers first and
+crash the run unsaved -> now caught wherever it surfaces, the last completed step is saved (or, if it hit mid-update,
+the previous periodic checkpoint is kept); data loader closed explicitly at the end. Tested: SIGTERM to the main
+process, to the whole group, and to the group mid-step: exit 3 within 4-9 s with the checkpoint saved; normal finish
+exit 0. Resume = run `scripts/run_ours.sh` again.
