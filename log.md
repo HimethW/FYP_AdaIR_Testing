@@ -454,3 +454,21 @@ both on qbits' RTX 4080 SUPER (same GPU, same true-fp32 settings, so the compari
 Expected: ours done ~day 3, baseline ~day 6 after launch. Both launched detached (`setsid nohup`), auto-resume on
 restart. Iteration counts, LR schedule (planned lr 1e-4, short warmup, cosine to 1e-6, same for both) and the DCPT
 stage length are fixed at launch. Not started: the user has more changes to give first.
+
+### Training dashboard (`tools/dashboard.py`, `tools/dashboard_template.html`)
+Requested by the user, to monitor training. Runs detached on qbits (`setsid nohup python tools/dashboard.py --port 8765`,
+pid in /home/minura/Himeth/dashboard/dashboard.pid). Every 15 s it samples the GPU (util, memory, temperature, power,
+compute processes + owners), CPU load, RAM and free disk on Himeth's filesystem, reads every runs/<name>/ (args,
+metrics.jsonl, train.log, checkpoints, eval*.json) and runs/eval_released/, keeps 7 days of GPU history in
+/home/minura/Himeth/dashboard/gpu_history.jsonl, and writes dashboard/data.json + a self-contained index.html.
+Served on **127.0.0.1:8765 only** (not reachable from outside); view with an SSH tunnel from the laptop:
+`ssh -N -L 8765:127.0.0.1:8765 minura@192.248.10.67`, then http://localhost:8765 (refreshes every 15 s).
+Page: GPU / memory / temperature / disk / RAM / CPU tiles (disk warning under 30 GB), run selector, run card (status,
+iterations, epochs, ETA, speed, LR, settings, checkpoints), loss / LR / speed charts, DCPT loss / accuracy, in-training
+validation PSNR per set, mask health (band areas per AFLB, shape params vs bounds, flags a param at its bound), GPU
+history (1h / 6h / 24h / 7d), all-runs comparison table, eval_fyp.py results, log tail. Charts follow the dataviz
+guidance (reference palette validated light + dark, legend for >= 2 series, crosshair tooltip, table view, dark mode).
+Checked by rendering with headless Chromium (installed in Himeth/.tmp + .cache; libasound unpacked into
+Himeth/.tmp/libs, nothing installed system-wide) on two demo runs at 1280 px light/dark and 390 px: no JS errors.
+Fixed after looking: faint raw-loss lines were drawn outside their charts (not in the y-range) -> included + clipped;
+number formats; epochs < 0.01 shown as 0.00; time-axis ticks snapped to round clock times.
