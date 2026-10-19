@@ -158,3 +158,60 @@ Notes:
 - The star band picks up the FFT wrap-around edge (bright frame): the image-border discontinuity puts
   energy along the u/v axes, where the star's arms are. Same in the original AdaIR. Possible later
   fix: window or pad before the FFT. Not changed.
+
+### Read the full AdaIR paper (arXiv 2403.14614v1, 28 pages incl. supplementary)
+Notes that matter for our changes:
+- FMiM: 3x3 conv on the degraded image I (not on the features X; Table 9: image-level 30.52 dB vs
+  feature-level 29.29 dB), FFT, MGB = GAP -> 1x1 -> GELU -> 1x1 -> sigmoid -> alpha, beta.
+  Low mask `M_l[H/2 - aH/k : H/2 + aH/k, W/2 - bW/k : W/2 + bW/k] = 1`, **k = 128**, "a small value ...
+  as the curve junction is relatively small in Fig. 1". So the paper *intends* a tiny low band:
+  half-width at most H/128 px = 1/64 (1.6%) of Nyquist. At AdaIR's feature sizes (16-64 px on 128
+  crops) that is under one pixel, so the window is empty: the bug is in the paper's formula, not only
+  the code. Our mask fix (cutoff = fraction of Nyquist, ~0.5 at init) and the shaped bands use a much
+  wider notion of "low"; the dot at the 50%-energy radius (0.03-0.13 of Nyquist on Kodak) is the
+  closest analogue of the paper's intended window.
+- Band features: Q from the band F_* = IFFT(M_* F), K/V from X (multi-dconv head transposed CA).
+- FMoM: H-L = sigmoid(conv7x7([GAP_c, GMP_c](X_h))) gates X_l spatially; L-H = sigmoid(shared
+  MLP(GAP_s) + MLP(GMP_s)) of X_l gates X_h per channel; aggregate -> 1x1 -> X_m; final CA with Q from
+  X, K/V from X_m. para1 / para2 are in the code only, not in the paper.
+- Ablation (Table 7, dehazing, 20 epochs): baseline 28.21; + FMiM with a *fixed* 10x10 square mask
+  29.79; + L-H 30.37; + H-L 30.52; full AdaIR (MGB instead of the fixed mask) 31.24.
+  Note: with the released code and k = 128, the MGB mask is empty on 128 crops, so the +0.72 dB of
+  "MGB over fixed mask" was most likely measured with no low band at all (if the ablation used this
+  code). The released weights agree: low path dead (results.md A4).
+- Supplementary: AFLBs only in the decoder (encoder + decoder 29.70 vs 30.52); one AFLB per decoder
+  level is best (level 2: 28.58, 2+3: 29.83, 2+3+4: 30.52); FMoM vs plain spatial attention
+  30.52 vs 29.67 (cross-band interaction matters, which BSA generalises to 4 bands); TB = Restormer
+  MDTA + GDFN.
+- Training, paper: L1, Adam (0.9, 0.999), lr 2e-4, 150 epochs, batch 32 (all-in-one), 128 crops,
+  random flips. Released code: AdamW, LinearWarmupCosineAnnealingLR(warmup 15, max 180) but 150 epochs
+  (LR never reaches its minimum), batch 8 per GPU x 4 GPUs = 32. To decide when we write our training.
+
+### Checked the planning diagram against `patches/shaped_bands.py`
+Module tree printed from the code (fre2, dim 192, 0.96M params). Every block in the diagram maps to code:
+
+| Diagram | Code | Match |
+|---|---|---|
+| (a) AFLB* at the 3 decoder positions, fed the degraded image I | `apply()` replaces fre1 / fre2 / fre3; AdaIR.forward calls them with `inp_img` after latent, dec level 3, dec level 2 | yes |
+| (b) I -> Conv 3x3 -> FFT -> F | `FreModuleBands.split`: `conv1` (3 -> C), `fft2`, centred | yes |
+| (b) P -> SGB (NEW) -> 4 shaped masks | `sgb(p)` -> `decode_params` -> `band_masks` (B, 4, h, w) | yes |
+| (b) M_b * F -> IFFT, x4 | `spec * masks`, `ifft2(...).abs()` (abs as in the original) | yes |
+| (b) 4 CA, Q = band, K/V = X (red dashed) | `band_ca` = 4 x `Chanel_Cross_Attention`, `ca(band, y)` | yes |
+| (c) BSA, per-pixel self-attention over the 4 bands, 4x4, 4 heads | `BandSelfAttention(num_heads=4)`, softmax over bands at every pixel | yes |
+| (c) sum -> Conv 1x1 -> X_m | `merge(sum(bands))` | yes |
+| (c) CA(Q = X, K/V = X_m) -> X~ | `channel_cross_agg(y, agg)`, then `out * para1 + y * para2` (as original code) | yes |
+| (c) H-L and L-H removed | no FreRefine in FreModuleBands | yes |
+| (d) CA: 1x1 + Dconv 3x3 for Q/K/V, C x C softmax, 1x1 | unchanged `Chanel_Cross_Attention` | yes |
+| (e) SGB: GAP, STD -> concat -> 1x1 -> GELU -> 1x1 -> + learned base -> 8 shape params | `ShapeGenerator`: `[mean, std]` (2C) -> 1x1 (C/8) -> GELU -> 1x1 (8, zero-init) + `base` | yes |
+| (f) band emb -> LN -> 1x1 Q/K/V -> softmax over 4 bands -> x V -> Conv 1x1 (zero-init) -> + residual | `band_emb` (4, C) -> LayerNorm WithBias -> `q`/`k`/`v` 1x1 -> einsum -> softmax -> `proj` (zero-init) + input | yes |
+| (g) dot: disc, radius at 50% of non-DC energy | `dot_r = r50 * exp(s0)`, r50 per image from the feature spectrum | yes |
+| (g) star: rotated superellipse (theta, p, size, aspect) | `star_theta`, `star_p`, `star_size`, `star_aspect` | yes |
+| (g) lobe: \|v'\| >= a + c u'^2 (vertex a, curvature c, theta) | `lobe_vertex`, `lobe_curv`, `lobe_theta` | yes |
+| (g) rest = 1 - the three | `M_rest = (1-D)(1-S)(1-L)`; masks sum to 1 | yes |
+
+Not specified by the diagram (my choices, listed so they can be changed): starting shapes, priority
+dot > star > lobe for the overlaps, tau = 0.05, DFT-mirror symmetrisation, residual taken from the band
+inputs before the band embedding, q.k scaled by 1/sqrt(head dim), SGB hidden width C/8, unbounded
+shape params with safety clamps.
+
+Commits from here on have no Co-Authored-By trailer (user request).
