@@ -73,3 +73,10 @@ Consequences:
   the repo-local identity to `Himeth Walgampaya <103624187+HimethW@users.noreply.github.com>`,
   re-authoring the three commits and force-pushing over the first push. All commits from here on use
   this identity.
+- Push credentials: the first push was not prompted for a token. A GitHub OAuth login for HimethW
+  (scopes repo/workflow, i.e. all repos) was supplied from the user's own device through the
+  connection to the server, and saved by the `store` helper. It was deleted from the server and
+  replaced with a fine-grained token: HimethW, only `FYP_AdaIR_Testing`, Contents read/write,
+  expires 2027-03-30. Checked: dry-run pushes to other HimethW repos are denied.
+  To rotate it, regenerate on GitHub and save it with:
+  `( umask 077; read -rsp "Paste token: " T && echo && printf 'https://HimethW:%s@github.com/HimethW/FYP_AdaIR_Testing.git\n' "$T" > ~/.git-credentials-fyp )`
