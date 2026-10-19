@@ -215,3 +215,61 @@ inputs before the band embedding, q.k scaled by 1/sqrt(head dim), SGB hidden wid
 shape params with safety clamps.
 
 Commits from here on have no Co-Authored-By trailer (user request).
+
+### Latest-version changes (from the user's final old-server version): bounded shapes, FFT loss, DCPT, precision
+The old run with unbounded shape params and a high shape LR collapsed the masks (stars became straight
+crossing lines, lobes rotated, the dot vanished in fre2/fre3 and covered 39% in fre1). Four changes:
+
+**1. Bounded mask shapes, normal LR** (`patches/shaped_bands.py`, default `bounded=True`)
+- Each raw SGB output is squashed: value = lo + (hi - lo) * sigmoid(raw) (log space for scale-like
+  params); the SGB base starts at the logit of the starting shape, so every image still starts at
+  exactly the starting shapes. `BOUNDS`:
+  dot_scale 0.5-2.0 x r50 (log) | star_theta +-22.5 deg | star_p 0.4-1.0 | star_size 0.4-0.95 |
+  star_aspect 2/3-3/2 (log) | lobe_vertex 0.4-0.9 | lobe_curv 0.1-1.5 (log) | lobe_theta +-30 deg.
+- star_p first had a lower bound of 0.25; `figures/bands_bounds.png` showed the star degenerating into
+  a thin cross (1% area, sub-pixel arms) there, so it was raised to 0.4 (~4-5% area at the limit).
+- Shape params train at the normal LR: no LR multiplier anywhere (to be kept so in the training script).
+- `bounded=False` keeps the earlier unbounded version for ablations.
+
+**2. Loss: pixel L1 + 0.1 FFT L1** (`patches/losses.py`, `PixelFFTLoss`)
+- FFT term exactly as the AdaIR author's SFNet code (checked: difference 0.0): `fft2` over (H, W),
+  default unnormalised norm, real/imag stacked, mean L1; weight 0.1. Computed in fp32 under autocast.
+- Measured (results.md A7): on 128 crops this FFT term is ~87-91x the pixel term for noise-like errors,
+  so it is ~90% of the total loss (95% on 256 crops); ~46% for haze-like errors. With `norm="ortho"` the
+  same weight gives ~7% (0.7% for haze). The two are very different objectives; the old run's choice is
+  unknown. Default = author's convention; `norm` option added so it can be A/B tested.
+
+**3. DCPT pre-training** (`patches/dcpt.py`)
+- Paper: Hu et al., "Universal Image Restoration Pre-training via Degradation Classification", ICLR 2025,
+  arXiv 2501.15510; official code github.com/MILab-PKU/dcpt (read in full; it has no license file, so
+  this is our own implementation, nothing copied).
+- Followed the official code where it differs from the paper text: per iteration one backward on
+  L_pix + L_cls, where L_pix = L1(net(gt), gt) (clean image through the whole network) and L_cls = focal
+  loss (gamma 2) of a classifier on decoder features of net(lq). Optimisers: net AdamW lr 2e-4 wd 0,
+  classifier AdamW lr 5e-5 wd 1e-4. (Paper text: alternating stages, a conv on the deepest feature for
+  generation.) Their configs also use EMA 0.999 and a cosine schedule; fine-tune lr 3e-4.
+- Features: outputs of AdaIR's decoder_level3 / 2 / 1 (dims 192 / 96 / 96 at H/4, H/2, H), the same hook
+  points as their Restormer config (AdaIR shares the backbone). All three AFLBs are upstream, so the
+  classification loss also trains the masks / SGB. The classification forward stops after
+  decoder_level1 (custom exception in the hook).
+- Classifier (7.45M params, only used during pre-training): per level, add softmax-weighted feature,
+  2 bottleneck blocks (1x1-3x3-1x1, width 2x, channel LayerNorm), 1x1 to next width + maxpool 2 + ReLU;
+  2 more bottlenecks, GAP, linear.
+- Labels from AdaIR's de_id: noise levels merged into one class (as their 5D setting); mapping in
+  `ADAIR_DE_ID_TO_CLASS`, to be extended for the mixture classes.
+- Memory: a DCPT step runs two forward passes, ~12.5 GB at batch 2 (128 crops, fp32).
+
+**4. Precision** (`patches/amp.py`, and FreModuleBands / losses)
+- Checked: the released AdaIR fails under bf16 autocast ("Unsupported dtype BFloat16", torch.fft has no
+  bf16), and fp16 FFTs fail on non-power-of-2 sizes. So any bf16 use needs the frequency path in fp32,
+  which matches what the user remembers from the old server.
+- FreModuleBands now always runs its frequency path (conv on I, FFT, masks, IFFT) in fp32; the FFT loss
+  too; `amp.fp32_frequency(model)` does the same for the original / mask-fix AFLBs (for baselines).
+  This costs no accuracy. Whether the rest of training runs in bf16 is decided by measurement
+  (results.md A9) and, for training quality, a matched A/B run; default stays fp32 until then.
+- Checks done (results.md A6-A9): bounds hold; FFT term sizes measured; DCPT runs end to end and learns
+  (held-out degradation accuracy 0.19 -> 0.82 after 1500 tiny iterations on synthetic degradations);
+  bf16 training halves memory (batch 8 fits vs 4) and gives 1.64x images/s, but bf16 *inference* costs
+  0.015 dB on every Kodak image with the released weights. Decision for now: evaluation always fp32;
+  training precision decided by a matched short A/B run once the datasets are in (fp32 + gradient
+  accumulation to batch 32 vs bf16 batch 8 + accumulation).

@@ -311,3 +311,78 @@ dot / star / lobe / rest per AFLB:
 | 50 | 0.214 | 5.6 / 6.0 / 26.7 / 61.7% | 0.159 | 3.7 / 6.9 / 26.8 / 62.6% | 0.061 | 1.2 / 8.5 / 26.8 / 63.5% |
 
 The dot follows the image: noise adds high-frequency energy, so the 50% radius grows.
+
+### A6. Bounded mask shapes (2026-10-19)
+`python tools/check_shaped_bands.py` (bounded default), `python tools/plot_bounds.py` -> `figures/bands_bounds.png`.
+
+Decoded starting shapes vs INIT_SHAPE: max diff 2.4e-8. Raw SGB outputs in [-50, 50] (plus 1000 random draws
+with std 20) all decode inside the bounds:
+
+| Param | Start | Bounds | Space |
+|---|---|---|---|
+| dot_scale (x r50) | 1.0 | 0.5 - 2.0 | log |
+| star_theta | 0 | -22.5 - +22.5 deg | linear |
+| star_p | 0.5 | 0.4 - 1.0 (first 0.25: thin-cross collapse, see log) | linear |
+| star_size | 0.75 | 0.4 - 0.95 | linear |
+| star_aspect | 1.0 | 2/3 - 3/2 | log |
+| lobe_vertex | 0.6 | 0.4 - 0.9 | linear |
+| lobe_curv | 0.4 | 0.1 - 1.5 | log |
+| lobe_theta | 0 | -30 - +30 deg | linear |
+
+Band areas (dot / star / lobe / rest, 128x128, r50 = 0.1) at the extremes, from `figures/bands_bounds.png`:
+start 1 / 8 / 27 / 64%; star_p 0.4: 1 / 4 / 27 / 68%; star_p 1.0: 1 / 27 / 25 / 46%; star_size 0.4: 1 / 2 / 27 / 70%;
+star_size 0.95: 1 / 14 / 26 / 58%; lobe_vertex 0.4: 1 / 8 / 46 / 45%; lobe_vertex 0.9: 1 / 8 / 4 / 86%;
+lobe_curv 0.1: 1 / 8 / 36 / 54%; lobe_curv 1.5: 1 / 8 / 14 / 76%; dot_scale 2: 4 / 6 / 27 / 63%.
+All earlier shaped-band checks (A5) unchanged with bounds on.
+
+### A7. Pixel L1 + 0.1 FFT L1: size of the terms (2026-10-19)
+`python tools/check_losses.py`. fft_l1 vs SFNet's training code: difference 0.0. Kodak24 random crops
+(48 per size); "AdaIR output" = released adair3d on the sigma-25 crops.
+
+| Error | Crop | L_pix | L_fft (unnormalised) | L_fft / L_pix | FFT share of total at w 0.1 | ortho: L_fft / L_pix | ortho share |
+|---|---|---|---|---|---|---|---|
+| noisy sigma 25 input | 128 | 0.0758 | 6.873 | 90.7 | 90.1% | 0.71 | 6.6% |
+| AdaIR output on sigma 25 | 128 | 0.0176 | 1.518 | 86.5 | 89.6% | 0.68 | 6.3% |
+| hazy input (t 0.5, A 0.9) | 128 | 0.2376 | 2.012 | 8.5 | 45.9% | 0.07 | 0.7% |
+| noisy sigma 25 input | 256 | 0.0757 | 13.725 | 181.4 | 94.8% | 0.71 | 6.6% |
+| AdaIR output on sigma 25 | 256 | 0.0180 | 3.201 | 178.1 | 94.7% | 0.70 | 6.5% |
+| hazy input (t 0.5, A 0.9) | 256 | 0.2392 | 4.323 | 18.1 | 64.4% | 0.07 | 0.7% |
+
+Under bf16 autocast the loss is fp32 and gradients are finite.
+
+### A8. DCPT functional check (2026-10-19)
+`python tools/check_dcpt.py --iters 1500 --batch 2` on the bounded shaped-band AdaIR. Synthetic degradations on
+Kodak24 128 crops (noise sigma 15/25/50, haze t 0.3-0.7 A 0.7-1.0, Gaussian blur sigma 1.5-3, low light),
+4 classes, images 1-20 train, 21-24 held out. Not a real pre-training run (no datasets yet).
+
+- Classification pass stops after decoder_level1 (refinement calls: 0); features 96x128x128, 96x64x64, 192x32x32.
+- L_cls alone gives gradient to the encoder (patch_embed 39.1) and all AFLBs (conv1 2.9e-4 / 2.6e-4 / 6.4e-4,
+  fre3 SGB base 4.2e-7; para1 = 0.1).
+- Classifier 7.45M params; 435 ms / iteration, 12.5 GB peak (batch 2, fp32).
+
+| Iterations | L_pix (first -> last 10%) | L_cls | train acc | held-out acc (chance 0.25) | held-out per class after (noise / haze / blur / low light) |
+|---|---|---|---|---|---|
+| 400 | 0.047 -> 0.031 | 0.800 -> 0.408 | 0.33 -> 0.57 | 0.19 -> 0.57 | 0.00 / 0.25 / 0.89 / 1.00 |
+| 1500 | 0.039 -> 0.012 | 0.542 -> 0.069 | 0.50 -> 0.89 | 0.19 -> 0.82 | 1.00 / 1.00 / 0.42 / 0.97 |
+
+### A9. fp32 vs bf16 (2026-10-19)
+`python tools/check_precision.py`. RTX 4080 SUPER 16 GB; TF32 on for cuDNN convs (PyTorch default), off for matmul.
+
+Training step, shaped-band AdaIR + PixelFFTLoss + AdamW, 128x128 crops:
+
+| Batch | fp32 ms / step | fp32 peak | bf16 ms / step | bf16 peak | bf16 speed-up | ms / image fp32 -> bf16 |
+|---|---|---|---|---|---|---|
+| 2 | 212 | 6.8 GB | 224 | 3.8 GB | 0.95x | 106 -> 112 |
+| 4 | 271 | 13.3 GB | 239 | 7.1 GB | 1.13x | 68 -> 60 |
+| 6 | OOM | | 276 | 10.4 GB | | -> 46 |
+| 8 | OOM | | 331 | 13.7 GB | | -> 41 |
+| 12, 16 | OOM | | OOM | | | |
+
+Best throughput: fp32 batch 4 = 68 ms / image; bf16 batch 8 = 41 ms / image (1.64x).
+
+Released AdaIR (adair3d, frequency step in fp32) inference on Kodak24 sigma 25: fp32 32.534 dB, bf16 32.519 dB;
+bf16 - fp32 per image: mean -0.015, min -0.031, max -0.003 dB (worse on every image); max pixel diff 0.0095.
+-> evaluate / deploy-reference in fp32.
+
+Shaped-band model, one training step bf16 vs fp32 (same weights, para1 0.1): output rel. diff 3.1e-3,
+gradient cosine 0.99998, gradient rel. diff 7.0e-3. Training-quality effect still to be measured with a matched run.
