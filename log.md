@@ -493,3 +493,22 @@ crash the run unsaved -> now caught wherever it surfaces, the last completed ste
 the previous periodic checkpoint is kept); data loader closed explicitly at the end. Tested: SIGTERM to the main
 process, to the whole group, and to the group mid-step: exit 3 within 4-9 s with the checkpoint saved; normal finish
 exit 0. Resume = run `scripts/run_ours.sh` again.
+
+### Results folder and mask shapes at 5 epochs
+User: create /home/minura/Himeth/results (outside the repo; holds our results) and, after 5 epochs, a
+`results/mask_shapes/` folder showing the mask shapes of each AFLB for each degradation.
+- `tools/plot_mask_shapes.py`: runs the first N (20) test images of each degradation (clean, noise s15/25/50,
+  rain, haze (SOTS unseen), haze+noise s25, rain+noise s25, haze+rain ours, haze+rain CDD-11; centre 256 crops)
+  through a shaped-band checkpoint and writes masks_grid.png (rows fre1/2/3, columns degradations: mean log
+  feature spectrum + dot / star / lobe outlines + band areas), masks_<degradation>.png (outlines + filled
+  4-band partition per AFLB, area mean / sd), shape_params.csv / .json (mean / sd of every shape param and band
+  area), README.md. CPU only (~5.5 s / image with 8 threads, ~18 min for 200 images); training speed unaffected
+  (7.1-7.2 img/s during the test).
+- `tools/mask_shapes_at_epoch.py`: waits until a run passes N epochs, saves that checkpoint's model + EMA weights
+  to <out>/weights_stepXXXXXXX.pt, runs the plot on the EMA weights, exits. Started detached:
+  `--run runs/ours_ft --epochs 5 --out /home/minura/Himeth/results/mask_shapes` (log:
+  results/mask_shapes_watch.log). 5 epochs of the 20-epoch stage = step 24,932; checkpoints come every 1,000
+  steps, so it uses step 25,000 (5.01 epochs), expected ~2026-10-20 23:45.
+- Tested on the stage-1 (DCPT) checkpoint at step 1,500 (0.30 epochs), 5 images per degradation: the deepest
+  block fre1 already adapts its masks per degradation (dot area 6% clean / 7% rain / 14% haze, haze+noise,
+  haze+rain / 20% CDD-11 haze+rain; star slightly rotated for rain), fre2 / fre3 still near the starting shapes.
