@@ -55,6 +55,73 @@ para1 set to 0.5 in all AFLBs to mimic a trained model (it is 0 at init, which b
 | `remove()` vs original, max abs diff | n/a | 0.0 |
 | state_dict keys | n/a | identical |
 
+### A4. Mask fix with the released `adair3d.ckpt` on Kodak24, noise sigma 25 (2026-10-19)
+`python tools/check_mask_fix.py --ckpt ckpt/adair3d.ckpt --images data/test/denoise/kodak24 --sigma 25`
+(24 images, 768x512, noise as in `DenoiseTestDataset`, numpy seed 0). Figure: `figures/mask_check_adair3d.png`.
+
+Fixed low/high split vs an independent reference on the unshifted FFT grid: max abs diff **0.0** at
+16x16, 32x48, 64x64, 33x47 (odd), 127x128.
+
+Per AFLB, mean over the 24 images:
+
+| AFLB (feature size) | Model | Mask area | Images with a mask | Non-DC energy in low band | mean abs low | mean abs high | Cutoff h / w (range) |
+|---|---|---|---|---|---|---|---|
+| fre1 (64x96) | original | 0.000% | 0/24 | 0.000% | 0.0000 | 0.0931 | hard mask |
+| fre1 (64x96) | fixed | 25.07% | 24/24 | 78.0% | 0.0904 | 0.0159 | 0.495 / 0.506 (0.492-0.510) |
+| fre2 (128x192) | original | 0.000% | 0/24 | 0.000% | 0.0000 | 0.1390 | hard mask |
+| fre2 (128x192) | fixed | 24.45% | 24/24 | 88.6% | 0.1369 | 0.0148 | 0.493 / 0.496 (0.489-0.497) |
+| fre3 (256x384) | original | 0.000% | 1/24 | 0.094% | 0.0030 | 0.0834 | hard mask |
+| fre3 (256x384) | fixed | 24.82% | 24/24 | 87.3% | 0.0847 | 0.0110 | 0.498 / 0.498 (0.497-0.501) |
+
+How much each AFLB changes the decoder feature, |agg * para1| / |y * para2|:
+
+| | fre1 | fre2 | fre3 |
+|---|---|---|---|
+| original | 0.0326 | 0.1235 | 0.0000 |
+| fixed | 0.0298 | 0.1248 | 0.0000 |
+| para1 mean abs (released) | 0.0226 | 0.0380 | 0.0012 |
+| para2 mean abs (released) | 0.009 | 0.026 | 0.030 |
+
+Released weights vs PyTorch default init U(-b, b), b = 1/sqrt(fan_in) (KS test):
+
+| Layer | n | max abs w / b | std / (b/sqrt3) | KS p |
+|---|---|---|---|---|
+| fre1.rate_conv.0 | 18432 | 1.00 | 1.00 | 0.090 |
+| fre1.rate_conv.2 | 96 | 1.00 | 0.93 | 0.41 |
+| fre2.rate_conv.0 | 4608 | 1.00 | 1.00 | 0.46 |
+| fre2.rate_conv.2 | 48 | 0.99 | 0.91 | 0.053 |
+| fre3.rate_conv.0 | 1152 | 1.00 | 1.01 | 0.81 |
+| fre3.rate_conv.2 | 24 | 0.73 | 0.66 | 0.029 |
+| fre1.conv1 (trained, for contrast) | 10368 | 0.77 | 0.49 | 0 |
+| fre2.conv1 (trained) | 5184 | 0.90 | 0.53 | 2e-202 |
+| fre3.conv1 (trained) | 2592 | 0.46 | 0.46 | 6e-169 |
+
+rate_conv is consistent with never having been trained (fre3.rate_conv.2's p = 0.029 is one of 9 tests on
+24 weights, not significant after correction); conv1 is clearly trained.
+
+Cross-attention temperatures in the released model (4 heads each). `channel_cross_h` is the one that
+processes the **low** band (names are swapped in FreModule.forward):
+
+| AFLB | channel_cross_l (high band) | channel_cross_h (low band) | channel_cross_agg |
+|---|---|---|---|
+| fre1 | 0.69, 0.70, 0.66, 0.42 | 0.46, 0.46, 0.46, 0.46 | 0.50, 0.55, 0.50, 0.52 |
+| fre2 | 0.71, 0.68, 0.69, 0.70 | 0.46, 0.46, 0.46, 0.46 | 0.54, 0.54, 0.60, 0.52 |
+| fre3 | 0.46, 0.46, 0.46, 0.46 | 0.46, 0.46, 0.46, 0.46 | 0.44, 0.41, 0.42, 0.41 |
+
+0.46 everywhere = init 1.0 shrunk by weight decay alone (zero queries give zero gradient): the low path,
+and all of fre3, never learned.
+
+Denoising with the released weights, no retraining (Kodak24, sigma 25):
+
+| | PSNR | SSIM |
+|---|---|---|
+| noisy input | 20.44 | 0.3502 |
+| released AdaIR (original mask) | 32.53 | 0.8875 |
+| released AdaIR + mask_fix | 32.53 | 0.8875 |
+
+fixed - original per image: mean -0.000 dB, min -0.001, max +0.000. The fix does nothing without retraining:
+the cutoffs are untrained (~0.5 for every image) and the rest of the network was trained around an empty mask.
+
 ---
 
 ## B. Old server results (from the feasibility presentation, not reproduced)

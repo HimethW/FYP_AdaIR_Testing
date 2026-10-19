@@ -80,3 +80,35 @@ Consequences:
   expires 2027-03-30. Checked: dry-run pushes to other HimethW repos are denied.
   To rotate it, regenerate on GitHub and save it with:
   `( umask 077; read -rsp "Paste token: " T && echo && printf 'https://HimethW:%s@github.com/HimethW/FYP_AdaIR_Testing.git\n' "$T" > ~/.git-credentials-fyp )`
+
+### Downloaded released checkpoints and Kodak24
+- Released AdaIR checkpoints from the README's Google Drive folder
+  (`https://drive.google.com/drive/folders/1x2LN4kWkO3S65jJlH-1INUFiYt8KFzPH`) into `ckpt/` with
+  `gdown --folder` (gdown 5.2.0 added to requirements-fyp.txt). sha256:
+  - `adair3d.ckpt` f3822d9c2eaf4a812f4122c5ec0082bc8eaf2bee9cb2b3a961d4984ed05937fb
+  - `adair5d.ckpt` e5b8ea892b68057f7d20265ac92585286362b0512c755fddd46681364d17dcf9
+  - `adair-single-denoise.ckpt` 17acf9d598a18b5b86e26718377827a98fd09d075c6547b76c188ce9e3bd3f77
+  - `adair-single-derain.ckpt` 7a9558ae5a1e096da0d9633f5d38c34270f8aa9f99f680ef1d4a991f0f312a81
+  - `adair-single-dehaze.ckpt` 33195f1362c71ad31f27765b29e510aae7be046ef72aeeee109bccee5ad00881
+- Kodak24 (`https://r0k.us/graphics/kodak/kodak/kodimNN.png`, 24 PNGs, 768x512) into
+  `data/test/denoise/kodak24/` for quick real-image checks.
+- Disk: `/home` is 97% full (110 GB free) at this point; keep an eye on it when datasets come in.
+
+### Checked the mask fix with the released weights: `tools/check_mask_fix.py`
+Script checks (results.md A4, figure `figures/mask_check_adair3d.png`):
+1. The fixed low/high split matches an independent implementation built on the unshifted FFT grid
+   (`torch.fft.fftfreq`, no roll/shift) exactly (max diff 0.0) for even and odd sizes, so the mask
+   sits on the right frequencies.
+2. On Kodak24 + noise sigma 25 with `adair3d.ckpt`: the fixed mask covers ~25% of the spectrum and the
+   low band carries 78-89% of the non-DC energy in every AFLB; original: empty in fre1/fre2 on all 24
+   images, a 2x2 box around DC in fre3 on 1/24 (fre3 is 256x384 there, so h//128 = 2).
+3. Findings about the released model (it was trained with a dead low-frequency path):
+   - `rate_conv` weights are still at their random init (KS test vs PyTorch's default U(-b, b) not
+     rejected; conv1, which is trained, is clearly rejected). They never got a gradient.
+   - The low-path cross-attention temperature (`channel_cross_h`; the names are swapped in
+     FreModule.forward: `channel_cross_h` processes the low band) is exactly 0.46 in every head of every
+     AFLB: zero queries give zero gradient, so only AdamW weight decay moved it from 1.0.
+   - fre3's whole branch is nearly off: para1 mean |.| = 0.0012, contribution 0.0000 of the feature.
+4. Dropping the fix into the released weights changes nothing: Kodak24 sigma 25 PSNR 32.53 both
+   (max per-image diff 0.001 dB). The cutoffs come out ~0.5 for every image (untrained rate_conv).
+   So the fix only pays off with training, which fits the plan (train from scratch at the end).
