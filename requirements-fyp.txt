@@ -1,8 +1,11 @@
 # Environment used on qbits (RTX 4080 SUPER, driver 580 / CUDA 13.0), 2026-10-19.
 # The upstream env.yaml pins PyTorch 1.13 + CUDA 11.6, which has no proper sm_89 (Ada) support.
 #
-#   conda create -n adair python=3.10
-#   conda activate adair
+# Everything stays inside /home/minura/Himeth (user rule): env.sh (copy in this repo: env_qbits.sh) points
+# pip / conda / torch / CUDA / HF / matplotlib caches and TMPDIR into Himeth and activates the env there.
+#   source /home/minura/Himeth/env.sh            # sets the caches first
+#   conda create -p /home/minura/Himeth/envs/adair python=3.10
+#   source /home/minura/Himeth/env.sh            # now activates it
 #   pip install -r requirements-fyp.txt
 #
 --extra-index-url https://download.pytorch.org/whl/cu121

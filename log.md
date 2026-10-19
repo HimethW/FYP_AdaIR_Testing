@@ -401,3 +401,31 @@ Code for this: `fyp/models.py` (`original` is now the pure upstream model unless
 wrapper; `backbone_only`, `is_backbone`), `train_fyp.py` (`--init_backbone`, `--freeze_backbone N|-1`).
 Checked (A13): ours at init = released AdaIR with its branch off, to 3 decimals; frozen phase leaves all 497 backbone
 tensors bit-identical and trains 5.0M AFLB params; unfreezing trains all 31.13M.
+
+### Everything moved inside /home/minura/Himeth (user rule: only use the Himeth folder on qbits)
+Moved / rebuilt inside Himeth and verified (eval reproduces A10 numbers, training with backbone init + freeze runs,
+plots work, push works):
+- Python env: rebuilt at `/home/minura/Himeth/envs/adair` (same pinned versions, requirements-fyp.txt); the old
+  `~/miniforge3/envs/adair` (5.8 GB) removed and its lines taken out of `~/.conda/environments.txt`.
+- `/home/minura/Himeth/env.sh` (copy in the repo: `env_qbits.sh`): activates that env and points pip, conda
+  packages, torch, CUDA kernel cache, Hugging Face, matplotlib caches and TMPDIR into Himeth. Source it first.
+- GitHub token file: `~/.git-credentials-fyp` -> `/home/minura/Himeth/.git-credentials-fyp` (outside the repo
+  folder, never committed); repo-local credential.helper updated.
+- Removed my files from shared caches: 560 pip cache files (1.94 GB) from today's installs (405 older files kept),
+  gdown cookie, matplotlib font cache, 3 torch kernel-cache files.
+- Not removed (auto-mode blocked editing the shared conda installation and ~/.ssh; left for the user): 6 conda
+  package files from the first env build (python 3.10.22, openssl, ca-certificates, libsqlite, ld_impl,
+  _openmp_mutex) in ~/miniforge3/pkgs and their urls.txt lines, and a hashed github.com entry in
+  ~/.ssh/known_hosts (added by the first SSH push attempt). ~/.nv/ComputeCache is shared with other GPU jobs on
+  this account and can't be separated; from now on CUDA's cache goes to Himeth/.cache/nv.
+On Aberdeen only the user's workspaces/Himeth folder may be used; the resource check there only read system info.
+
+### Resources (2026-10-19)
+- qbits: RTX 4080 SUPER 16 GB idle, Threadripper 2950X 32 threads, 125 GB RAM, /home 87 GB free (98% full, shared).
+  Ours needs ~13.5 GB GPU and ~3 days (DCPT stage + 20 epochs): fits.
+- Aberdeen (read-only check via its saved SSH connection): no RTX A5000; 2x Quadro RTX 6000 24 GB + 1x Quadro
+  RTX 5000 16 GB, all busy (16.9/24.6, 16.9/24.6, 10.3/16.4 GB used; 100/100/40% util; GPU2 runs another
+  AdaIR-distillation job), 40 threads, 93 GB RAM, `/` 93% full, /mnt/sasindi_drive 898 GB free, no conda / unzip,
+  Python 3.12, network to GitHub / HF / PyTorch / Box / Drive fine, no scheduler. The baseline (~13 GB) doesn't
+  fit next to the current jobs, and an RTX 6000 is ~3x slower than qbits for fp32. Options: find the A5000 host,
+  run both on qbits one after the other (~6 days), or get a free GPU on Aberdeen (~8-9 days for the baseline).

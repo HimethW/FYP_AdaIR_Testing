@@ -6,6 +6,7 @@
   python train_fyp.py --name dcpt_shaped --stage dcpt --variant shaped --tasks aio3_mix --iters 20000 --batch 2 --accum 16
   python train_fyp.py --name shaped_dcpt_ft --variant shaped --tasks aio3_mix --init runs/dcpt_shaped/last.pt --iters 100000
 
+First `source /home/minura/Himeth/env.sh` (env + all caches inside Himeth).
 Long runs: start detached so they survive session restarts, e.g.
   setsid nohup python train_fyp.py ... > runs/<name>.out 2>&1 &
 Ctrl-C / SIGTERM saves runs/<name>/last.pt; running the same command again resumes from it.
