@@ -91,8 +91,9 @@ def training_processes():
         cmd = [c.decode(errors="ignore") for c in cmd if c]
         if any(c.endswith("train_fyp.py") for c in cmd) and "--name" in cmd:
             i = cmd.index("--name")
-            if i + 1 < len(cmd):
-                live[cmd[i + 1]] = int(os.path.basename(d))
+            if i + 1 < len(cmd):  # data-loader workers share the command line; the main process has the lowest pid
+                pid = int(os.path.basename(d))
+                live[cmd[i + 1]] = min(pid, live.get(cmd[i + 1], pid))
     return live
 
 
