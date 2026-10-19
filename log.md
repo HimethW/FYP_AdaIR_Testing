@@ -312,3 +312,48 @@ Mixtures (choices; the old synthesis code is lost, so these are documented and r
   mixtures will be generated on the fly by the training loader with the same functions.
 - SOTS / OTS overlap: each SOTS outdoor gt is matched to its most similar OTS clear image (32x32 grey
   cosine, confirmed at 128x128); the seen list goes to `splits/sots_outdoor_seen_in_ots.txt`.
+- Download finished on qbits (22 GB in data/). The first big download was killed when the Claude session
+  restarted (background jobs die with the session); `prepare_data.py` resumed it (WED / O-HAZE / NH-HAZE had
+  finished, CDD-11 continued from file 249, OTS from scratch; one Box connection reset was retried). All
+  72,135 OTS hazy images in hazy_outside.txt and their 2,061 clear images present; nothing missing.
+  Note: the user's laptop is never used; everything runs and is stored on qbits.
+- Checked through AdaIR's own loaders: AdaIRTrainDataset finds all 5,144 denoise images (incl. the 400 BSD),
+  200 rain pairs (x120), and the test loaders load every pair of BSD68 / Urban100 / Kodak24 / Rain100L / SOTS /
+  O-HAZE / NH-HAZE.
+- `tools/build_mixtures.py` built the fixed test sets (data/test/mix, 1.5 GB): haze_noise25 500, rain_noise25 100,
+  haze_rain 500, haze_rain_cdd11 200. SOTS / OTS overlap: the best-match cosine is cleanly bimodal (75 scenes at
+  >= 0.999, none between 0.98 and 0.999), and the 75 matches are pixel-identical (cosine 1.0, mean abs diff 0.0;
+  same IDs as OTS). 76 of the 500 hazy inputs show a scene that is in OTS training, 424 do not: exactly the
+  old deck's "SOTS haze (424 valid)". List: `splits/sots_outdoor_seen_in_ots.txt` (tracked in git).
+
+### Training and evaluation code (`fyp/`, `train_fyp.py`, `eval_fyp.py`)
+- `fyp/models.py`: `build_model(variant)` for original / maskfix / shaped / shaped_unbounded (original and maskfix
+  get the fp32 frequency step so they run under autocast); `load_weights` reads our checkpoints, the released
+  Lightning checkpoints and plain state dicts.
+- `fyp/data.py`: `TrainSet` with the 7 tasks (denoise, derain, dehaze, haze_noise, rain_noise, haze_rain,
+  haze_rain_cdd11), mixtures generated per sample with `tools/mixtures.py`, AdaIR's random_augmentation, DCPT
+  labels (6 classes; both haze+rain sources share one). Epoch = fixed count per task (items repeated + random
+  remainder, like AdaIR's list repetition). Presets: `aio3` = AdaIR's exact 3-task epoch (111,567 crops),
+  `aio3_mix` = aio3 + 12,000 of each mixture (159,567 crops; mixture sizes are our choice).
+- `fyp/metrics.py`: PSNR / SSIM like AdaIR's val_utils (RGB, [0,1], skimage) but with `channel_axis`: the
+  upstream `compute_psnr_ssim` uses `multichannel=True`, which scikit-image 0.21 no longer has, and crashes
+  ("win_size exceeds image extent"), so the upstream test.py cannot compute SSIM in this env.
+- `fyp/evaluate.py`: registry of all test sets (bsd68 / urban100 / kodak24 at sigma 15/25/50, rain100l, sots,
+  sots_unseen, sots_seen, haze_noise25(+_unseen/_seen), rain_noise25, haze_rain(+_unseen/_seen),
+  haze_rain_cdd11, ohaze, ohaze_41_45, nhhaze, nhhaze_51_55; presets paper3 / main / extra). Protocol `adair`
+  = centre crop to a multiple of 16 as AdaIR's test.py (default, comparable with the paper); `full` = whole
+  image, reflect pad. Denoise noise seeded per image (crc32 of name + sigma), so results don't depend on file
+  order. Images over 2.6 MP (O-HAZE) run in 1024 tiles with 64 px linear blending.
+- `train_fyp.py`: stages `restore` and `dcpt`; AdamW (AdaIR: lr 2e-4, wd 0.01; DCPT stage: net wd 0,
+  classifier lr 5e-5 wd 1e-4), linear warmup (15/180 of the run, AdaIR's ratio) then cosine to 1e-6,
+  iteration-based with gradient accumulation (default 4 x 8 = 32, the paper's batch), loss l1 or l1_fft
+  (weight, norm), fp32 or bf16, optional EMA and grad clipping, `--init` (e.g. from a DCPT run), automatic
+  resume from runs/<name>/last.pt, SIGTERM/SIGINT saves and stops, checkpoints every 1k steps + snapshots every
+  20k, validation every 5k on the first 10 images of 7 sets (PSNR) or DCPT top-1 on test images, shape-param
+  and band-area logging (to catch mask collapse), TensorBoard + metrics.jsonl + train.log.
+  Long runs must be started detached (`setsid nohup ... &`): background jobs die when the Claude session restarts.
+- `eval_fyp.py`: evaluate any checkpoint on any sets, JSON with per-image PSNR / SSIM (for paired tests).
+
+Checks (results.md A10-A11): the released adair3d reproduces the paper's Table 1 to <= 0.012 dB, and the old deck's
+SOTS unseen / training-copy numbers exactly. Smoke tests passed: restore (shaped, aio3_mix), resume, DCPT stage,
+init from DCPT (0 missing keys), bf16, original + EMA, detached run stopped by SIGTERM saves at the current step.

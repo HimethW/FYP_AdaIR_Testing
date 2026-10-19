@@ -170,3 +170,4 @@ AdaIR_results/
 logs/
 lightning_logs/
 wandb/
+runs/

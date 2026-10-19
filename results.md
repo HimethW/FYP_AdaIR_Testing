@@ -386,3 +386,27 @@ bf16 - fp32 per image: mean -0.015, min -0.031, max -0.003 dB (worse on every im
 
 Shaped-band model, one training step bf16 vs fp32 (same weights, para1 0.1): output rel. diff 3.1e-3,
 gradient cosine 0.99998, gradient rel. diff 7.0e-3. Training-quality effect still to be measured with a matched run.
+
+### A10. Evaluation check: released AdaIR (adair3d.ckpt) vs the paper (2026-10-19)
+`python eval_fyp.py --ckpt ckpt/adair3d.ckpt --variant original --sets paper3 sots_unseen sots_seen` (protocol adair, fp32).
+
+| Set | Paper Table 1 (PSNR / SSIM) | Ours | Old deck |
+|---|---|---|---|
+| BSD68 sigma 15 | 34.12 / 0.935 | 34.119 / 0.9353 | 34.12 |
+| BSD68 sigma 25 | 31.45 / 0.892 | 31.462 / 0.8921 | 31.46 |
+| BSD68 sigma 50 | 28.19 / 0.802 | 28.182 / 0.8019 | 28.18 |
+| Rain100L | 38.64 / 0.983 | 38.641 / 0.9830 | 38.64 |
+| SOTS outdoor (500) | 31.06 / 0.980 | 31.062 / 0.9802 | |
+| SOTS unseen (424) | | 30.072 / 0.9785 | 30.07 |
+| SOTS seen in OTS training (76) | | 36.590 / 0.9894 | 36.59 ("SOTS training copies") |
+
+BSD68 noise differs from the paper's draw (seeded per image), so +-0.01 dB there is noise.
+
+### A11. Data checks (2026-10-19)
+- SOTS outdoor vs OTS clear (32x32 grey cosine of the best match, 492 gt): [0, 0.8) 156, [0.8, 0.9) 161,
+  [0.9, 0.95) 93, [0.95, 0.98) 7, [0.98, 0.999) 0, [0.999, 1] 75. The 75 are pixel-identical -> 76 hazy inputs seen, 424 unseen.
+- Fixed mixture test sets: haze_noise25 500 (424 unseen), rain_noise25 100, haze_rain 500 (424 unseen), haze_rain_cdd11 200.
+- Training throughput with the real data loader (12 workers), shaped AdaIR, 128 crops, PixelFFTLoss:
+  restore fp32 batch 4: 14.5 img/s (13.5 GB); restore bf16 batch 8: 23.3 img/s (13.8 GB); DCPT stage fp32 batch 2:
+  4.8 img/s (12.7 GB); original AdaIR fp32 batch 4: 15.3 img/s.
+  -> one aio3_mix epoch (159,567 crops): 3.1 h fp32 / 1.9 h bf16; one aio3 epoch (111,567): 2.1 h / 1.3 h.
