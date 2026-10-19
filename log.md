@@ -429,3 +429,10 @@ On Aberdeen only the user's workspaces/Himeth folder may be used; the resource c
   Python 3.12, network to GitHub / HF / PyTorch / Box / Drive fine, no scheduler. The baseline (~13 GB) doesn't
   fit next to the current jobs, and an RTX 6000 is ~3x slower than qbits for fp32. Options: find the A5000 host,
   run both on qbits one after the other (~6 days), or get a free GPU on Aberdeen (~8-9 days for the baseline).
+- Correction (user): external / mounted drives on the servers (e.g. Aberdeen's /mnt/sasindi_drive) belong to other
+  people and must not be used. On Aberdeen only the user's workspaces/Himeth folder, on qbits only /home/minura/Himeth.
+- Aberdeen's usable GPU for us is GPU 2, a **Quadro RTX 5000** (Turing, 16 GB; not an A5000). At the check it had
+  10.3 GB used by another process (an AdaIR-distillation job), leaving ~6 GB: not enough for the baseline (~13 GB
+  at batch 4, fp32) until that job ends. Expected speed vs qbits' RTX 4080 SUPER: fp32 ~11 vs ~52 TFLOPS, memory
+  bandwidth 448 vs 736 GB/s -> roughly 2.5-4x slower (estimate, not measured), i.e. ~7-12 days for 20 epochs of
+  the baseline vs ~3 days on qbits.
