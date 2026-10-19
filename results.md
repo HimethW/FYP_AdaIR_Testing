@@ -418,3 +418,18 @@ float64 reference, relative error: fp32 3.2e-7, TF32 3.2e-7 (cuDNN picked a non-
 bf16 2.9e-3. Released AdaIR eval in true fp32: BSD68 sigma 25 31.462 / 0.8921, Rain100L 38.641 / 0.9830
 (identical to the TF32-default run in A10).
 Decision: true fp32 everywhere. aio3_mix epoch ~ 159,567 x 74.7 ms ~ 3.3 h (vs 2.7 h TF32, 1.8 h bf16 batch 8).
+
+### A13. Starting our model from the released backbone (2026-10-19)
+First 10 images of each set, protocol adair, true fp32.
+
+| Model | Rain100L | BSD68 sigma 25 | SOTS unseen |
+|---|---|---|---|
+| released AdaIR | 38.394 | 31.442 | 29.970 |
+| released AdaIR, frequency branch off (para1 = 0) | 38.217 | 31.441 | 29.959 |
+| ours at init (backbone + para2 from released, fresh AFLBs) | 38.217 | 31.441 | 29.959 |
+| ours at init, para2 not carried over (= 1) | 6.094 | 4.186 | 5.644 |
+
+Fresh in ours: 150 tensors (fre1/2/3: sgb, band_ca, bsa, merge, channel_cross_agg, conv1, para1). The released
+frequency branch is worth 0.18 dB on Rain100L and ~0.01 dB elsewhere.
+Frozen-backbone smoke test (3 frozen + 3 unfrozen steps): backbone tensors changed vs released after step 3: 0 / 497,
+after step 6: 497 / 497; trainable 5.00M frozen / 31.13M unfrozen; frozen phase 20 img/s at 8.9 GB (batch 4).

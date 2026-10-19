@@ -33,7 +33,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 from fyp.data import CLASS_NAMES, LABELS, TrainSet, parse_tasks, worker_init
 from fyp.evaluate import evaluate, load_sample, resolve, test_sets
-from fyp.models import VARIANTS, build_model, load_weights
+from fyp.models import VARIANTS, build_model, is_backbone, load_weights
 from patches.dcpt import DCPT
 from patches.losses import PixelFFTLoss
 
@@ -69,6 +69,10 @@ def get_args():
     p.add_argument("--ema", type=float, default=0.0, help="EMA decay, 0 = off (DCPT's configs use 0.999)")
     p.add_argument("--clip", type=float, default=0.0, help="grad-norm clip, 0 = off")
     p.add_argument("--init", default=None, help="start from these weights (e.g. a DCPT run's last.pt)")
+    p.add_argument("--init_backbone", action="store_true",
+                   help="from --init load only the backbone (+ para2), all AFLB weights start fresh")
+    p.add_argument("--freeze_backbone", type=int, default=0,
+                   help="train only the AFLBs (and the DCPT classifier) for this many iterations; -1 = whole run")
     p.add_argument("--no_resume", action="store_true")
     p.add_argument("--workers", type=int, default=12)
     p.add_argument("--seed", type=int, default=0)
@@ -174,12 +178,13 @@ def main():
     torch.backends.cuda.matmul.allow_tf32 = args.tf32
     device = "cuda"
 
-    model = build_model(args.variant).to(device)
+    model = build_model(args.variant, amp_safe=args.precision == "bf16").to(device)
     if args.init:
-        _, missing, unexpected = load_weights(model, args.init, strict=False)
-        log(f"init from {args.init}: missing {len(missing)} keys, unexpected {len(unexpected)}")
+        _, missing, unexpected = load_weights(model, args.init, strict=False, backbone=args.init_backbone)
+        log(f"init from {args.init}{' (backbone + para2 only)' if args.init_backbone else ''}: "
+            f"missing {len(missing)} keys (fresh), unexpected {len(unexpected)} (ignored)")
         if missing:
-            log(f"  missing (left at init): {missing[:8]}{' ...' if len(missing) > 8 else ''}")
+            log(f"  fresh: {sorted({'.'.join(k.split('.')[:2]) for k in missing})}")
 
     counts = parse_tasks(args.tasks)
     if args.stage == "dcpt":
@@ -195,6 +200,16 @@ def main():
     schedulers = [torch.optim.lr_scheduler.LambdaLR(o, lambda s: lr_factor(s, args.iters, args.warmup, min_ratio))
                   for o in optimizers]
     loss_fn = PixelFFTLoss(args.fft_weight, args.fft_norm) if args.loss == "l1_fft" else None
+
+    def set_backbone_frozen(frozen):
+        n = 0
+        for name, prm in model.named_parameters():
+            if is_backbone(name):
+                prm.requires_grad_(not frozen)
+            n += prm.numel() if prm.requires_grad else 0
+        if dcpt is not None:
+            n += sum(p.numel() for p in dcpt.classifier.parameters())
+        log(f"backbone {'frozen' if frozen else 'trainable'}: {n / 1e6:.2f}M trainable params")
     ema = EMA(model, args.ema) if args.ema > 0 else None
 
     data = TrainSet(counts, root=args.data, patch=args.patch, seed=args.seed)
@@ -235,6 +250,9 @@ def main():
     signal.signal(signal.SIGTERM, on_signal)
     signal.signal(signal.SIGINT, on_signal)
 
+    frozen = args.freeze_backbone != 0 and (args.freeze_backbone < 0 or step < args.freeze_backbone)
+    set_backbone_frozen(frozen)
+
     tb = SummaryWriter(os.path.join(run, "tb"))
     metrics_f = open(os.path.join(run, "metrics.jsonl"), "a")
 
@@ -262,6 +280,9 @@ def main():
     t0, n_img = time.time(), 0
     model.train()
     while step < args.iters and not stop["flag"]:
+        if frozen and args.freeze_backbone > 0 and step >= args.freeze_backbone:
+            frozen = False
+            set_backbone_frozen(False)
         for o in optimizers:
             o.zero_grad(set_to_none=True)
         for _ in range(args.accum):
@@ -283,7 +304,7 @@ def main():
                 acc.setdefault(k, []).append(float(v))
             n_img += lq.shape[0]
         if args.clip > 0:
-            torch.nn.utils.clip_grad_norm_(model.parameters(), args.clip)
+            torch.nn.utils.clip_grad_norm_([p for p in model.parameters() if p.requires_grad], args.clip)
         for o in optimizers:
             o.step()
         for s in schedulers:
@@ -314,7 +335,7 @@ def main():
             else:
                 net = model
                 if ema is not None:
-                    net = build_model(args.variant).to(device)
+                    net = build_model(args.variant, amp_safe=args.precision == "bf16").to(device)
                     net.load_state_dict(ema.state)
                 log(f"val ({'ema' if ema else 'model'}, first {args.val_n} images per set):")
                 res = evaluate(net, sets, val_names, device=device, limit=args.val_n, log=log)

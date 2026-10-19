@@ -367,3 +367,37 @@ days, so the only zero-risk choice is true fp32: `train_fyp.py` now sets TF32 of
 it, `--precision bf16` still available), `eval_fyp.py` always runs true fp32. Re-checked: released AdaIR on
 BSD68 sigma 25 / Rain100L gives the same 31.462 / 38.641 as with TF32 (A10). If time gets tight, TF32 is the
 first fallback, never bf16 for evaluation.
+
+### DECISION (2026-10-19): how the two models are trained
+Agreed with the user. Both start from the released `ckpt/adair3d.ckpt` (150 epochs, 3 tasks; it never saw
+mixtures: 15.74 dB on haze+noise) and get the same data and the same training length, so the comparison is fair.
+The goal is that our model ends up better than the original.
+
+**Baseline: original AdaIR**, run on the second server (Aberdeen, A5000)
+- Model: `--variant original` = net/model.py exactly as released, no patch at all (not even the mask fix).
+- Weights: the full released checkpoint, including its own AFLBs.
+- Loss: plain L1 (the original recipe). No precautions, no DCPT, no FFT loss.
+- Data: `aio3_mix` (AdaIR's 3 tasks + haze+noise, rain+noise, haze+rain, CDD-11 haze+rain). Fine-tune ~20 epochs.
+
+**Ours: shaped-band AdaIR with everything we built**, run on qbits
+- Model: `--variant shaped` (mask fix idea -> 4 bounded shaped bands, SGB, per-band CA, BSA).
+- Weights: `--init ckpt/adair3d.ckpt --init_backbone`: only the backbone comes from the released model; none of
+  its (broken) AFLB weights are used, all three AFLBs start fresh. Exception: `para2`, the decoder feature scale
+  (out * para1 + y * para2) that the released decoder was trained around; without it the model drops to ~5 dB
+  (results.md A13), so it is backbone, not frequency branch.
+- Precautions against the new blocks being ignored (the released model learned to do without its frequency
+  blocks): fresh para1 (starts at 0 and opens as it becomes useful); a phase where the backbone is frozen and only
+  the new AFLBs train (`--freeze_backbone`). Plan: stage 1 = DCPT with the backbone frozen (trains the new AFLBs +
+  the degradation classifier, i.e. the warm-up), stage 2 = restoration fine-tuning of everything.
+- Loss: L1 + 0.1 FFT. Data: `aio3_mix`, same ~20 epochs as the baseline in stage 2. True fp32.
+- At the end: frequency-branch on/off check, to show the new blocks are actually used.
+
+Both: evaluated with `eval_fyp.py` (presets main + extra; SOTS reported on the 424 unseen images as the main number,
+the 76 seen in OTS separately). Exact iteration counts, fine-tuning LR schedule (planned: lr 1e-4, short warmup,
+cosine to 1e-6, the same for both) and the DCPT stage length are set at launch. Not started: the user has more
+changes to give first.
+
+Code for this: `fyp/models.py` (`original` is now the pure upstream model unless bf16 needs the fp32 frequency
+wrapper; `backbone_only`, `is_backbone`), `train_fyp.py` (`--init_backbone`, `--freeze_backbone N|-1`).
+Checked (A13): ours at init = released AdaIR with its branch off, to 3 decimals; frozen phase leaves all 497 backbone
+tensors bit-identical and trains 5.0M AFLB params; unfreezing trains all 31.13M.
