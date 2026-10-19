@@ -13,6 +13,7 @@ Ctrl-C / SIGTERM saves runs/<name>/last.pt; running the same command again resum
 Everything for a run goes to runs/<name>/ (gitignored): args.json, train.log, metrics.jsonl, tb/, last.pt,
 snapshots iter_XXXXXXX.pt. One "iteration" = one optimiser step = batch x accum samples.
 
+Precision: true fp32 by default (TF32 off; --tf32 / --precision bf16 trade accuracy for speed, results.md A12).
 Defaults follow AdaIR's train.py where it has one (AdamW lr 2e-4, default weight decay 0.01, warmup then
 cosine, 128 crops, effective batch 32 = 4 x 8 accumulation on one 16 GB GPU) and the DCPT code for the DCPT
 stage (net AdamW lr 2e-4 wd 0, classifier AdamW lr 5e-5 wd 1e-4, focal loss, L1 on clean images).
@@ -61,7 +62,10 @@ def get_args():
     p.add_argument("--loss", choices=("l1", "l1_fft"), default="l1_fft")
     p.add_argument("--fft_weight", type=float, default=0.1)
     p.add_argument("--fft_norm", choices=("backward", "ortho"), default="backward")
-    p.add_argument("--precision", choices=("fp32", "bf16"), default="fp32")
+    p.add_argument("--precision", choices=("fp32", "bf16"), default="fp32",
+                   help="fp32 (default, max quality) or bf16 autocast (frequency path and loss stay fp32)")
+    p.add_argument("--tf32", action="store_true",
+                   help="allow TF32 in convs / matmuls (~18%% faster, 10-bit multiply inputs); default off = true fp32")
     p.add_argument("--ema", type=float, default=0.0, help="EMA decay, 0 = off (DCPT's configs use 0.999)")
     p.add_argument("--clip", type=float, default=0.0, help="grad-norm clip, 0 = off")
     p.add_argument("--init", default=None, help="start from these weights (e.g. a DCPT run's last.pt)")
@@ -166,6 +170,8 @@ def main():
     log("args: " + json.dumps(vars(args)))
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
+    torch.backends.cudnn.allow_tf32 = args.tf32  # PyTorch's default is True for convs
+    torch.backends.cuda.matmul.allow_tf32 = args.tf32
     device = "cuda"
 
     model = build_model(args.variant).to(device)

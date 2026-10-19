@@ -410,3 +410,11 @@ BSD68 noise differs from the paper's draw (seeded per image), so +-0.01 dB there
   restore fp32 batch 4: 14.5 img/s (13.5 GB); restore bf16 batch 8: 23.3 img/s (13.8 GB); DCPT stage fp32 batch 2:
   4.8 img/s (12.7 GB); original AdaIR fp32 batch 4: 15.3 img/s.
   -> one aio3_mix epoch (159,567 crops): 3.1 h fp32 / 1.9 h bf16; one aio3 epoch (111,567): 2.1 h / 1.3 h.
+
+### A12. True fp32 vs TF32 vs bf16 (2026-10-19)
+Shaped AdaIR training step, batch 4, 128 crops, PixelFFTLoss, AdamW: true fp32 (TF32 off) 74.7 ms / image;
+TF32 convs + matmuls 61.1 ms; bf16 autocast 58.8 ms (41.4 ms at batch 8, A9). One 3x3 conv (96 -> 96, 64x64) vs a
+float64 reference, relative error: fp32 3.2e-7, TF32 3.2e-7 (cuDNN picked a non-TF32 kernel for this shape),
+bf16 2.9e-3. Released AdaIR eval in true fp32: BSD68 sigma 25 31.462 / 0.8921, Rain100L 38.641 / 0.9830
+(identical to the TF32-default run in A10).
+Decision: true fp32 everywhere. aio3_mix epoch ~ 159,567 x 74.7 ms ~ 3.3 h (vs 2.7 h TF32, 1.8 h bf16 batch 8).

@@ -1,4 +1,4 @@
-"""Evaluate an AdaIR variant on the test sets (PSNR / SSIM, RGB, fp32).
+"""Evaluate an AdaIR variant on the test sets (PSNR / SSIM, RGB, true fp32: TF32 off).
 
   # released AdaIR, the paper's 3-task sets (should reproduce the paper's Table 1)
   python eval_fyp.py --ckpt ckpt/adair3d.ckpt --variant original --sets paper3
@@ -33,6 +33,8 @@ def main():
     p.add_argument("--data", default="data")
     args = p.parse_args()
 
+    torch.backends.cudnn.allow_tf32 = False  # true fp32 inference
+    torch.backends.cuda.matmul.allow_tf32 = False
     ckpt = torch.load(args.ckpt, map_location="cpu", weights_only=False)
     variant = args.variant or (ckpt.get("variant") if isinstance(ckpt, dict) else None)
     if variant is None:

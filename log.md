@@ -357,3 +357,13 @@ Mixtures (choices; the old synthesis code is lost, so these are documented and r
 Checks (results.md A10-A11): the released adair3d reproduces the paper's Table 1 to <= 0.012 dB, and the old deck's
 SOTS unseen / training-copy numbers exactly. Smoke tests passed: restore (shaped, aio3_mix), resume, DCPT stage,
 init from DCPT (0 missing keys), bf16, original + EMA, detached run stopped by SIGTERM saves at the current step.
+
+### Precision decision: true fp32 for training and evaluation
+Asked by the user (goal = maximum PSNR, not speed). Measured on the shaped model (results.md A12): true fp32 (TF32
+off) 74.7 ms / image, TF32 convs (PyTorch's default) 61.1, bf16 autocast 58.8 (41 at batch 8). One conv vs a
+float64 reference: fp32 3.2e-7 relative error, bf16 2.9e-3 (~10,000x worse); bf16 inference already cost
+0.015 dB on every Kodak image (A9). Effect of bf16 / TF32 on *trained* quality is unknown without an A/B costing
+days, so the only zero-risk choice is true fp32: `train_fyp.py` now sets TF32 off by default (`--tf32` to allow
+it, `--precision bf16` still available), `eval_fyp.py` always runs true fp32. Re-checked: released AdaIR on
+BSD68 sigma 25 / Rain100L gives the same 31.462 / 38.641 as with TF32 (A10). If time gets tight, TF32 is the
+first fallback, never bf16 for evaluation.
