@@ -512,3 +512,8 @@ User: create /home/minura/Himeth/results (outside the repo; holds our results) a
 - Tested on the stage-1 (DCPT) checkpoint at step 1,500 (0.30 epochs), 5 images per degradation: the deepest
   block fre1 already adapts its masks per degradation (dot area 6% clean / 7% rain / 14% haze, haze+noise,
   haze+rain / 20% CDD-11 haze+rain; star slightly rotated for rain), fre2 / fre3 still near the starting shapes.
+- 2026-10-20 12:44: training paused at the user's request (a friend needed the GPU): a detached stopper waited for the
+  step-8,000 checkpoint, then sent SIGTERM; ours_ft finished its step and saved `last.pt` at step 8,004
+  (1.6 epochs), exit code 3, the launcher stopped, GPU free. Resume (when the user says): 
+  `setsid nohup bash scripts/run_ours.sh >> runs/ours.out 2>&1 &` (stage 1 returns at once, stage 2 continues from
+  step 8,004; remaining ~61 h). The 5-epoch mask-shape watcher keeps waiting.
