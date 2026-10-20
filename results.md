@@ -450,3 +450,14 @@ Stage 2 `ours_ft` first in-training validation, step 5,000 = 1.0 epoch, EMA weig
 | haze_rain_unseen | 26.976 / 0.9250 | |
 | haze_rain_cdd11 | 26.062 / 0.9443 | (full set 18.67 in B7) |
 Early, 10-image numbers only; the comparison that counts is the full eval of both models at 20 epochs.
+
+### A15. Our model, in-training validation through 3 epochs (2026-10-20 22:33)
+EMA weights, first 10 images per set, PSNR. Released AdaIR on the same 10 images from A13 where measured.
+
+| Step (epoch) | bsd68_s25 | rain100l | sots_unseen | haze_noise25 | rain_noise25 | haze_rain (ours) | haze_rain_cdd11 |
+|---|---|---|---|---|---|---|---|
+| 5,000 (1.00) | 31.121 | 38.648 | 29.815 | 25.691 | 30.076 | 26.976 | 26.062 |
+| 10,000 (2.01) | 31.274 | 38.709 | 29.926 | 25.940 | 30.230 | 27.607 | 27.594 |
+| 15,000 (3.01) | 31.288 | 38.773 | 30.404 | 25.749 | 30.281 | 27.902 | 28.991 |
+| released AdaIR (A13) | 31.442 | 38.394 | 29.970 | | | | |
+Step 18,000 at 22:30 (3.61 epochs), 13.3 img/s, ~55 h left. Paused 12:44-15:45 (GPU share) without loss.
