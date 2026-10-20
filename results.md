@@ -433,3 +433,20 @@ Fresh in ours: 150 tensors (fre1/2/3: sgb, band_ca, bsa, merge, channel_cross_ag
 frequency branch is worth 0.18 dB on Rain100L and ~0.01 dB elsewhere.
 Frozen-backbone smoke test (3 frozen + 3 unfrozen steps): backbone tensors changed vs released after step 3: 0 / 497,
 after step 6: 497 / 497; trainable 5.00M frozen / 31.13M unfrozen; frozen phase 20 img/s at 8.9 GB (batch 4).
+
+### A14. Our model, training progress (2026-10-20 12:04)
+Stage 1 `ours_dcpt` (DCPT warm-up, backbone frozen) finished 07:20 (6.3 h). DCPT top-1 on test images (10 per set):
+0.90 at the end (rain100l, sots_unseen, haze_noise25, rain_noise25, haze_rain, haze_rain_cdd11 all 1.00; bsd68_s25
+0.30). Train accuracy ~0.94 by step 1,500.
+Stage 2 `ours_ft` first in-training validation, step 5,000 = 1.0 epoch, EMA weights, first 10 images per set (PSNR / SSIM):
+
+| Set | ours_ft @ 1.0 epoch | released AdaIR, same 10 images (A13) |
+|---|---|---|
+| bsd68_s25 | 31.121 / 0.8939 | 31.442 |
+| rain100l | 38.648 / 0.9823 | 38.394 |
+| sots_unseen | 29.815 / 0.9779 | 29.970 |
+| haze_noise25_unseen | 25.691 / 0.8456 | (not measured on these 10; full set 15.74 in B7) |
+| rain_noise25 | 30.076 / 0.8624 | (full set 24.51 in B7) |
+| haze_rain_unseen | 26.976 / 0.9250 | |
+| haze_rain_cdd11 | 26.062 / 0.9443 | (full set 18.67 in B7) |
+Early, 10-image numbers only; the comparison that counts is the full eval of both models at 20 epochs.
