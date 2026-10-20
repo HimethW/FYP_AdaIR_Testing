@@ -517,3 +517,9 @@ User: create /home/minura/Himeth/results (outside the repo; holds our results) a
   (1.6 epochs), exit code 3, the launcher stopped, GPU free. Resume (when the user says): 
   `setsid nohup bash scripts/run_ours.sh >> runs/ours.out 2>&1 &` (stage 1 returns at once, stage 2 continues from
   step 8,004; remaining ~61 h). The 5-epoch mask-shape watcher keeps waiting.
+- 2026-10-20 15:45: resumed after the GPU was free (samitha's jobs had finished). The first resume **crashed** on its
+  first step: `train_fyp.py` loaded the checkpoint's EMA weights onto the CPU and the first EMA update mixed CPU and
+  GPU tensors ("Expected all tensors to be on the same device"). My resume test before launch had no EMA, so it
+  missed this. Nothing was saved after the crash (last.pt still step 8,004). Fix: move the EMA state to the device
+  on resume; tested (3 -> 6 steps with EMA across a restart); relaunched 15:48, past step 8,100 at 13.2 img/s,
+  ~62 h left (finish ~2026-10-23 05:40). The 5-epoch mask-shape watcher is still waiting (now ~03:10 on 10-21).

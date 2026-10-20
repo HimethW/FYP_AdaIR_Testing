@@ -232,7 +232,7 @@ def main():
         for sch, s in zip(schedulers, ck["schedulers"]):
             sch.load_state_dict(s)
         if ema is not None and ck.get("ema"):
-            ema.state = ck["ema"]
+            ema.state = {k: v.to(device) for k, v in ck["ema"].items()}  # loaded on CPU; the model is on the GPU
         step, epoch = ck["step"], ck["epoch"] + 1
         log(f"resumed from {last} at step {step} (starting epoch {epoch})")
 
