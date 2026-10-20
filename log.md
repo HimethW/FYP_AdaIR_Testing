@@ -523,3 +523,6 @@ User: create /home/minura/Himeth/results (outside the repo; holds our results) a
   missed this. Nothing was saved after the crash (last.pt still step 8,004). Fix: move the EMA state to the device
   on resume; tested (3 -> 6 steps with EMA across a restart); relaunched 15:48, past step 8,100 at 13.2 img/s,
   ~62 h left (finish ~2026-10-23 05:40). The 5-epoch mask-shape watcher is still waiting (now ~03:10 on 10-21).
+- 2026-10-21 03:00: usage check at 4.8 epochs (results.md A16): switching the new frequency branches off changes PSNR by
+  only -0.02..+0.03 dB on 6 sets, although they change the decoder features by 2-9%. The new blocks are barely used so
+  far. Reported to the user; training continues unchanged for now.

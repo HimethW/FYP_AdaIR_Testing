@@ -462,3 +462,21 @@ EMA weights, first 10 images per set, PSNR. Released AdaIR on the same 10 images
 | 20,000 (4.01) | 31.291 | 38.778 | 30.336 | 25.413 | 30.325 | 27.823 | 29.012 |
 | released AdaIR (A13) | 31.442 | 38.394 | 29.970 | | | | |
 Step 18,000 at 22:30 (3.61 epochs), 13.3 img/s, ~55 h left. Paused 12:44-15:45 (GPU share) without loss.
+
+### A16. Are the new frequency blocks used? ours_ft at step 24,000 (4.8 epochs) (2026-10-21 03:00)
+EMA weights, 6 images per set, centre 256 crops, CPU. "Off" = para1 = 0 in all three AFLBs (branch output removed).
+
+| Set | Branches on | Branches off | On - off |
+|---|---|---|---|
+| bsd68_s25 | 31.046 | 31.017 | +0.029 |
+| rain100l | 39.929 | 39.915 | +0.013 |
+| sots_unseen | 31.813 | 31.802 | +0.011 |
+| haze_noise25_unseen | 25.427 | 25.444 | -0.017 |
+| rain_noise25 | 30.893 | 30.892 | +0.001 |
+| haze_rain_cdd11 | 32.969 | 32.993 | -0.024 |
+
+AFLB change to the decoder feature |agg * para1| / |y * para2|: fre1 0.093, fre2 0.016, fre3 0.047 (released AdaIR:
+0.033 / 0.124 / 0.000). para1 mean |.|: 0.0020 / 0.0072 / 0.0060 (released 0.0226 / 0.0380 / 0.0012).
+Train loss still falling (total per 5k-step window: 0.1182, 0.1050, 0.1036, 0.1026, 0.1016); band areas moving (fre2 dot
+8 -> 14%, lobes wider in all AFLBs). So far the gains over the released model come from fine-tuning the backbone on
+the new data / loss, not from the new blocks: the "ignored new blocks" risk (log.md DECISION) is showing.
