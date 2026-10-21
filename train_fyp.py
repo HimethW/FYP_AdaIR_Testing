@@ -274,7 +274,11 @@ def main():
     frozen = args.freeze_backbone != 0 and (args.freeze_backbone < 0 or step < args.freeze_backbone)
     set_backbone_frozen(frozen)
     # forward / backward go through `net`; `model` stays the plain module (state dicts, EMA, validation)
-    net = DistributedDataParallel(model, device_ids=[torch.cuda.current_device()]) if world > 1 else model
+    # find_unused_parameters: the released AFLB (FreModule) has 15 tensors that never get a gradient: rate_conv
+    # (the int() cast of the mask cutoff cuts it off) and conv / score_gen (defined but never called). Their grads
+    # stay None, so AdamW skips them exactly as on one GPU.
+    net = (DistributedDataParallel(model, device_ids=[torch.cuda.current_device()], find_unused_parameters=True)
+           if world > 1 else model)
 
     tb = SummaryWriter(os.path.join(run, "tb")) if main_proc else None
     metrics_f = open(os.path.join(run, "metrics.jsonl"), "a") if main_proc else None
