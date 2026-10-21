@@ -327,7 +327,7 @@ def main():
                 set_backbone_frozen(False)
             for o in optimizers:
                 o.zero_grad(set_to_none=True)
-            seen = []  # (micro-batch, loss, tasks) of this step, reported if its gradient is non-finite
+            seen = []  # this step's micro-batches, reported and saved if its gradient is non-finite
             for i in range(args.accum):
                 b = next(stream)
                 lq, gt = b["lq"].to(device, non_blocking=True), b["gt"].to(device, non_blocking=True)
@@ -349,18 +349,12 @@ def main():
                 for k, v in parts.items():
                     acc.setdefault(k, []).append(float(v))
                 n_img += lq.shape[0]
-                seen.append((i, acc["loss"][-1], b["task"]))
-                if not math.isfinite(acc["loss"][-1]) and n_dumps < 3:
-                    n_dumps += 1
-                    path = os.path.join(run, f"nonfinite_r{rank}_s{step + 1:07d}_m{i}.pt")
-                    dump = {"lq": lq.cpu(), "gt": gt.cpu(), "task": b["task"], "step": step + 1, "micro": i}
-                    if n_dumps == 1:  # the weights it failed with (not yet updated), to reproduce it offline
-                        dump["model"] = {k: v.cpu() for k, v in model.state_dict().items()}
-                    save(path, dump)
+                seen.append((i, acc["loss"][-1], b["task"], lq, gt))
+                if not math.isfinite(acc["loss"][-1]):
                     report(f"NaN / inf loss at step {step + 1}, micro-batch {i}: tasks {dict(Counter(b['task']))}, "
                            f"lq finite {bool(torch.isfinite(lq).all())} "
                            f"[{float(lq.min()):.3g}, {float(lq.max()):.3g}], "
-                           f"gt finite {bool(torch.isfinite(gt).all())}; batch saved to {path}")
+                           f"gt finite {bool(torch.isfinite(gt).all())}")
             # gradients are already averaged across GPUs here, so every process takes the same decision
             grads = [p.grad for p in model.parameters() if p.grad is not None]
             gnorm = float(torch.linalg.vector_norm(torch.stack(torch._foreach_norm(grads)))) if grads else 0.0
@@ -370,7 +364,16 @@ def main():
                        if p.grad is not None and not torch.isfinite(p.grad).all()]
                 report(f"non-finite gradient at step {step + 1} (norm {gnorm}) in {len(bad)} tensors, e.g. {bad[:5]}; "
                        "this process's micro-batches: "
-                       + "; ".join(f"{i} loss {v:.4g} {dict(Counter(t))}" for i, v, t in seen))
+                       + "; ".join(f"{i} loss {v:.4g} {dict(Counter(t))}" for i, v, t, _, _ in seen))
+                if n_dumps < 3:  # for tools/repro_nonfinite.py: the batches and the weights they failed with
+                    n_dumps += 1
+                    path = os.path.join(run, f"nonfinite_r{rank}_s{step + 1:07d}.pt")
+                    save(path, {"step": step + 1, "variant": args.variant, "loss": args.loss,
+                                "fft_weight": args.fft_weight, "fft_norm": args.fft_norm,
+                                "micro": [{"i": i, "loss": v, "task": t, "lq": a.cpu(), "gt": g.cpu()}
+                                          for i, v, t, a, g in seen],
+                                "model": {k: v.cpu() for k, v in model.state_dict().items()} if main_proc else None})
+                    report(f"saved {path}")
                 if args.on_nonfinite == "stop" or n_bad > 20:
                     log(f"stopping before the update: last.pt keeps the weights of step {step}")
                     stop["flag"] = True
