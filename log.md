@@ -567,3 +567,8 @@ raw version we got from the original repo. train on the dataset for 20 epochs as
   logs, validates and saves; a stop signal on any GPU stops all at the same step; checkpoints interchangeable with
   1 GPU; the single-GPU code path is unchanged). `scripts/run_baseline.sh` takes `GPUS=0,1`. To be tested on Elgin
   (1 vs 2 GPU speed, validation, stop / resume across 2 -> 1 GPU) before the real launch.
+- 2026-10-21 18:30: Elgin setup done except the last check: the data fingerprint matched qbits on every folder but
+  test/denoise (168 vs 192 files). Kodak24 had been downloaded by hand on qbits (see "Downloaded released checkpoints
+  and Kodak24") and prepare_data.py had no step for it. Added a `kodak24` step (r0k.us, kodim01-24.png; kodim01's md5
+  matches qbits). Training data, mixtures and adair3d.ckpt (sha256) already matched. Elgin re-runs setup to fetch it
+  and re-check, then runs the 1 vs 2 GPU tests.
