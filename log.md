@@ -529,3 +529,11 @@ User: create /home/minura/Himeth/results (outside the repo; holds our results) a
 - 2026-10-21 03:30: the 5-epoch watcher produced results/mask_shapes (results.md A17): fre1 shapes pushed to their
   bounds (star angle, aspect, lobe vertex / curvature), fre2 / fre3 near the start; per-degradation differences
   mostly in the dot size, star / lobe nearly the same across degradations.
+- 2026-10-21 17:40: the user gave a new folder for Elgin: `/mnt/minura/minura/Himeth`, to be used for everything on Elgin
+  from now on. Read-only check: it is empty, owned by minura (rwx), on a local ext4 LVM volume (not NFS), 936 GB in
+  total with **413 GB free**. Elgin's root disk, where /home/minura lives, is 99% full (9.4 GB free), so nothing may
+  go to the home folder: env, pip/conda/torch/HF caches and TMPDIR all have to live under the new folder. GPUs: 3x
+  Quadro RTX 5000 16 GB, all idle. Driver 580.178, CUDA 13.0; system Python 3.12.3; no conda (the old
+  /home/minura/miniforge3 is gone). The write and speed tests were not run: Elgin's auto mode blocked writes on the
+  mount until the user confirms. With the new folder, disk space no longer rules Elgin out (the 2026-10-20 decision
+  rejected it for its 12 GB disk); nothing has been set up there yet.
