@@ -560,3 +560,10 @@ raw version we got from the original repo. train on the dataset for 20 epochs as
 - `env_elgin.sh` (copied to /mnt/minura/minura/Himeth/env.sh) also points HOME into the Himeth folder: Elgin's `/`
   is 99% full and shared, so no tool may write into /home/minura.
 - Speed: one Quadro RTX 5000 was estimated at 2.5-4x slower than qbits for fp32 (to be measured once set up).
+- 2026-10-21 17:50: Elgin env ready (python 3.10.22, torch 2.4.1+cu121, 3x Quadro RTX 5000 visible, nothing written
+  to /home/minura); setup moved on to the dataset downloads. Note: Elgin's `/` is down to 8.0 GB free (not us; all
+  our files are under /mnt/minura/minura/Himeth). Added optional multi-GPU training to `train_fyp.py` (torchrun / DDP,
+  restoration stage only; --batch / --accum per GPU, so 2 GPUs x 4 x 4 = the same 32 crops per step; only process 0
+  logs, validates and saves; a stop signal on any GPU stops all at the same step; checkpoints interchangeable with
+  1 GPU; the single-GPU code path is unchanged). `scripts/run_baseline.sh` takes `GPUS=0,1`. To be tested on Elgin
+  (1 vs 2 GPU speed, validation, stop / resume across 2 -> 1 GPU) before the real launch.
