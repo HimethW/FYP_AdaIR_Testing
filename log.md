@@ -526,3 +526,6 @@ User: create /home/minura/Himeth/results (outside the repo; holds our results) a
 - 2026-10-21 03:00: usage check at 4.8 epochs (results.md A16): switching the new frequency branches off changes PSNR by
   only -0.02..+0.03 dB on 6 sets, although they change the decoder features by 2-9%. The new blocks are barely used so
   far. Reported to the user; training continues unchanged for now.
+- 2026-10-21 03:30: the 5-epoch watcher produced results/mask_shapes (results.md A17): fre1 shapes pushed to their
+  bounds (star angle, aspect, lobe vertex / curvature), fre2 / fre3 near the start; per-degradation differences
+  mostly in the dot size, star / lobe nearly the same across degradations.

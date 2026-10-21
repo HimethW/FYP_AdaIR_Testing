@@ -460,6 +460,9 @@ EMA weights, first 10 images per set, PSNR. Released AdaIR on the same 10 images
 | 10,000 (2.01) | 31.274 | 38.709 | 29.926 | 25.940 | 30.230 | 27.607 | 27.594 |
 | 15,000 (3.01) | 31.288 | 38.773 | 30.404 | 25.749 | 30.281 | 27.902 | 28.991 |
 | 20,000 (4.01) | 31.291 | 38.778 | 30.336 | 25.413 | 30.325 | 27.823 | 29.012 |
+| 25,000 (5.01) | 31.365 | 38.821 | 30.155 | 24.922 | 30.327 | 27.631 | 29.420 |
+| 30,000 (6.02) | 31.354 | 38.837 | 29.942 | 25.107 | 30.361 | 27.627 | 29.323 |
+| 35,000 (7.02) | 31.360 | 38.813 | 30.012 | 25.415 | 30.367 | 27.974 | 29.597 |
 | released AdaIR (A13) | 31.442 | 38.394 | 29.970 | | | | |
 Step 18,000 at 22:30 (3.61 epochs), 13.3 img/s, ~55 h left. Paused 12:44-15:45 (GPU share) without loss.
 
@@ -480,3 +483,17 @@ AFLB change to the decoder feature |agg * para1| / |y * para2|: fre1 0.093, fre2
 Train loss still falling (total per 5k-step window: 0.1182, 0.1050, 0.1036, 0.1026, 0.1016); band areas moving (fre2 dot
 8 -> 14%, lobes wider in all AFLBs). So far the gains over the released model come from fine-tuning the backbone on
 the new data / loss, not from the new blocks: the "ignored new blocks" risk (log.md DECISION) is showing.
+
+### A17. Learned mask shapes at 5 epochs (`/home/minura/Himeth/results/mask_shapes/`, 2026-10-21 03:30)
+ours_ft step 25,000 (5.01 epochs), EMA weights, 20 test images per degradation, centre 256 crops
+(`tools/plot_mask_shapes.py`; figures masks_grid.png + one per degradation, numbers in shape_params.csv).
+Band areas dot / star / lobe / rest (%), clean -> CDD-11 haze+rain: fre1 4/8/14/75 -> 13/4/12/71;
+fre2 2/8/30/60 -> 9/4/31/56; fre3 1/6/38/56 -> 1/5/38/55.
+- fre1 (deepest, 32 px at 256 input) moved most, and several params sit at or near their bounds: star angle
+  -20.5 to -21.8 deg (bound -22.5), star aspect 0.70-0.74 (bound 0.667), lobe vertex 0.85-0.88 (bound 0.9),
+  lobe curvature 0.101-0.104 (bound 0.1), lobe angle +14 to +18 deg. The lobes are pushed out to the edge.
+- fre2 stays close to the start (p 0.50, size 0.75, aspect 1.02, vertex 0.58, curv 0.34, angles ~1 deg).
+- fre3 moved a little (p 0.45, size 0.70, aspect 0.87, curv 0.14-0.15, lobe angle 3.5-4 deg).
+- Per-degradation adaptation is mostly the dot (it follows the image's 50%-energy radius: fre1 dot_r 0.17 haze,
+  0.19 clean / rain, 0.24 noise s50, 0.38 CDD-11 haze+rain) plus 1-3.5 deg angle shifts for haze types; the
+  star / lobe shapes are nearly the same for every degradation, i.e. the shape generator adapts very little per image.
