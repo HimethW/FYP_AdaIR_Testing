@@ -603,3 +603,13 @@ raw version we got from the original repo. train on the dataset for 20 epochs as
   ~5.4 days). It can move to GPUs 0+1 from any checkpoint once GPU1 is free and `tools/check_nccl.py` (P2P on / off)
   plus a 2-GPU test come out clean. The NaN detector is on in stop mode: a non-finite gradient stops the run before
   the update, so last.pt keeps good weights.
+
+### LAUNCH (2026-10-21 19:10 IST): baseline on Elgin GPU0 (`scripts/run_baseline.sh`, run `baseline_ft`)
+Pure original AdaIR, full released adair3d.ckpt (missing 0 / unexpected 0), plain L1, aio3_mix, 99,730 iters x 32
+= 20.00 epochs, lr 1e-4, wd 0.01, 2% warmup, cosine to 1e-6, EMA 0.999, true fp32, seed 0, NaN detector in stop mode.
+Code at 5db58b2 on Elgin, in /mnt/minura/minura/Himeth/AdaIR (launcher PID 1043601, python 1043611, Elgin clock is
+UTC). Step 100: loss 0.031, gnorm 0.37, **6.8 img/s, 13.1 GB, ETA 130 h -> ~2026-10-27 05:30 IST**; no non-finite
+gradient. GPU0 runs at 86 C under load. GPU1 has another job on the same account; GPU2 is someone's desktop.
+Resume after any stop (on Elgin): `cd /mnt/minura/minura/Himeth/AdaIR && setsid nohup bash scripts/run_baseline.sh
+>> runs/baseline.out 2>&1 &` (add `GPUS=0,1` for 2 GPUs once that is verified). Monitoring is through the Elgin
+session; qbits' dashboard does not see this run.
