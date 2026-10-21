@@ -78,6 +78,9 @@ def get_args():
                    help="fp32 (default, max quality) or bf16 autocast (frequency path and loss stay fp32)")
     p.add_argument("--tf32", action="store_true",
                    help="allow TF32 in convs / matmuls (~18%% faster, 10-bit multiply inputs); default off = true fp32")
+    p.add_argument("--cudnn_benchmark", action="store_true",
+                   help="let cuDNN time its conv algorithms and keep the fastest (same fp32 precision, not bitwise "
+                        "reproducible); default off")
     p.add_argument("--ema", type=float, default=0.0, help="EMA decay, 0 = off (DCPT's configs use 0.999)")
     p.add_argument("--clip", type=float, default=0.0, help="grad-norm clip, 0 = off")
     p.add_argument("--on_nonfinite", choices=("stop", "skip"), default="stop",
@@ -200,6 +203,7 @@ def main():
     np.random.seed(args.seed)
     torch.backends.cudnn.allow_tf32 = args.tf32  # PyTorch's default is True for convs
     torch.backends.cuda.matmul.allow_tf32 = args.tf32
+    torch.backends.cudnn.benchmark = args.cudnn_benchmark
     device = "cuda"
 
     model = build_model(args.variant, amp_safe=args.precision == "bf16").to(device)

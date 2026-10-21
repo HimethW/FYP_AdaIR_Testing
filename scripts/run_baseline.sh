@@ -22,4 +22,4 @@ $launch train_fyp.py --name baseline_ft --stage restore --variant original --tas
   --iters 99730 --batch 4 --accum $((8 / n)) --lr 1e-4 --warmup 0.02 --min_lr 1e-6 \
   --loss l1 --ema 0.999 \
   --init ckpt/adair3d.ckpt \
-  --val_every 5000 --val_n 10 --ckpt_every 1000 --keep_every 20000
+  --val_every 5000 --val_n 10 --ckpt_every 1000 --keep_every 20000 "$@"  # extra train_fyp.py options, if any
