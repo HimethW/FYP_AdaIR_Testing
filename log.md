@@ -572,3 +572,15 @@ raw version we got from the original repo. train on the dataset for 20 epochs as
   and Kodak24") and prepare_data.py had no step for it. Added a `kodak24` step (r0k.us, kodim01-24.png; kodim01's md5
   matches qbits). Training data, mixtures and adair3d.ckpt (sha256) already matched. Elgin re-runs setup to fetch it
   and re-check, then runs the 1 vs 2 GPU tests.
+- 2026-10-21 18:45: Elgin data now identical to qbits on every folder (setup done). Benchmarks of the baseline
+  recipe on Elgin:
+  - 1 GPU (Quadro RTX 5000, batch 4 x accum 8): ~4.2 img/s (3.3-4.2), 13.0 GB. That is ~10.5 h per epoch, **~8.8
+    days for 20 epochs** on one GPU (qbits runs ours at 13.3 img/s). Validation after 60 steps from the released
+    weights (EMA, 10 images): bsd68_s25 31.437, rain100l 38.395, sots_unseen 29.959 (released on qbits: 31.442 /
+    38.394 / 29.970), haze_noise25 16.02, rain_noise25 24.62, haze_rain 21.10, cdd11 19.36. The pipeline works and
+    matches qbits.
+  - 2 GPUs: crashed at step 2. DDP found parameters without gradients: in the released AdaIR, 15 FreModule tensors
+    never get a gradient (per AFLB: `rate_conv` x2, cut off by the `int()` cast of the mask cutoff, and `conv` /
+    `score_gen`, defined but never called). So the original model's mask-size predictor is never trained at all,
+    which is another face of the mask bug. Fix: `find_unused_parameters=True`; those grads stay None, so AdamW
+    skips them exactly as on one GPU. Re-test running.
