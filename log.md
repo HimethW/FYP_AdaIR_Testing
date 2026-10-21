@@ -621,3 +621,8 @@ session; qbits' dashboard does not see this run.
 - 2026-10-21 20:15: the user asked for results as fast as possible and is fine with 1 GPU. Added `--cudnn_benchmark`
   (cuDNN autotuning, still fp32). The baseline was paused at step 736 (SIGTERM, saved) for an A/B speed test on
   Elgin; it resumes with the flag if that is >= 3% faster.
+- 2026-10-21 20:35: cuDNN autotuning A/B on Elgin: under the 3% threshold, so the baseline resumed from step 736
+  without it (no progress lost). Note: a resume always starts a new epoch (`epoch = saved epoch + 1`, fresh shuffle),
+  so the log's "ep" counter runs ahead after a mid-epoch stop. That's harmless: the run length is fixed in
+  iterations (99,730 x 32 crops = 20.0 epochs of samples) and every epoch is a random draw anyway. Same as ours
+  after its 8,004 resume.
