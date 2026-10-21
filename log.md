@@ -596,3 +596,10 @@ raw version we got from the original repo. train on the dataset for 20 epochs as
   - Reading: not the data, not the model. Suspects: corrupted GPU-to-GPU transfers (NCCL P2P over PCIe) or a faulty
     GPU1 (the 1-GPU runs only used GPU0). Next: `tools/check_nccl.py` (all-reduce results checked against a local
     sum, P2P on / off), GPU1 alone, 2 GPUs with NCCL_P2P_DISABLE=1.
+- 2026-10-21 19:25: Elgin system info: GPU0 and GPU1 are joined by an NVLink bridge (NV1, same NUMA node), so NCCL
+  uses NVLink P2P between them; ECC is off on all three cards; no Xid / NVRM / AER lines in the kernel log. Before the
+  transfer and GPU1 checks could run, GPU1 got busy with another job on the same account (4.3 GB, 80%, 85 C), so they
+  were skipped. Decision: start the baseline on GPU0 alone now (1-GPU path verified clean, ~6.8 img/s on a free GPU =
+  ~5.4 days). It can move to GPUs 0+1 from any checkpoint once GPU1 is free and `tools/check_nccl.py` (P2P on / off)
+  plus a 2-GPU test come out clean. The NaN detector is on in stop mode: a non-finite gradient stops the run before
+  the update, so last.pt keeps good weights.
