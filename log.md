@@ -541,3 +541,22 @@ User: create /home/minura/Himeth/results (outside the repo; holds our results) a
   write and speed tests ran inside that folder: writing works (files owned by minura); 2 GiB direct I/O writes at
   1.5 GB/s and reads at 2.0 GB/s; 2,000 x 200 KB files in 9.5 s, which was mostly the cost of generating the random
   test data, so many small PNGs are not a problem. All test files were removed and the folder is empty again (413 GB free).
+
+### Baseline moved to Elgin (2026-10-21)
+User: "start the baseline [training] on elgin in that folder /mnt/minura/minura/Himeth. keep in mind no fixes just the
+raw version we got from the original repo. train on the dataset for 20 epochs as we discussed". This replaces the
+2026-10-20 plan (baseline on qbits after ours); ours keeps running on qbits.
+- Recipe unchanged from the DECISION: `--variant original` (net/model.py as released, no patch, not even the mask fix;
+  checked: no patched module in the model), full released `adair3d.ckpt` (all 28.78M params load, 0 missing / 0
+  unexpected), plain L1, aio3_mix, 99,730 iters x 32 crops = 20.0 epochs, lr 1e-4, wd 0.01, 2% warmup, cosine to 1e-6,
+  EMA 0.999, true fp32 (Turing has no TF32 anyway), seed 0, same validation / checkpoint cadence as ours.
+  `scripts/run_baseline.sh`, run name `baseline_ft`, GPU 0 (GPU 2 carries another user's desktop).
+- Getting the data there: a temporary download link on qbits for Elgin to pull from was blocked by auto mode (it would
+  expose a local service), so Elgin downloads everything from the original sources with the same scripts
+  (`scripts/setup_elgin.sh`: Miniforge + env in the Himeth folder, prepare_data.py, build_mixtures.py, released
+  checkpoints with sha256 check). `tools/data_digest.sh` fingerprints every dataset folder (file count, bytes, sha256
+  over the md5 of every file); qbits' fingerprint is in `splits/data_digest_qbits.txt`, and setup only passes if
+  Elgin's is identical, so both models see exactly the same files.
+- `env_elgin.sh` (copied to /mnt/minura/minura/Himeth/env.sh) also points HOME into the Himeth folder: Elgin's `/`
+  is 99% full and shared, so no tool may write into /home/minura.
+- Speed: one Quadro RTX 5000 was estimated at 2.5-4x slower than qbits for fp32 (to be measured once set up).
