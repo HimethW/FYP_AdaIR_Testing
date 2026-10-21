@@ -156,7 +156,7 @@ def read_run(path, live):
             evals[os.path.basename(p)] = {k: [v["psnr"], v["ssim"], v["n"]] for k, v in e["results"].items()}
         except Exception:
             pass
-    samples_per_step = args.get("batch", 1) * args.get("accum", 1)
+    samples_per_step = args.get("batch", 1) * args.get("accum", 1) * args.get("world", 1)
     return dict(name=name, args=args, status=status, pid=live.get(name), step=step, iters=args.get("iters"),
                 per_epoch=per_epoch, samples_per_step=samples_per_step, started=started, updated=mtime,
                 last=last, series={k: downsample(v) for k, v in series.items()}, log=log_lines, ckpts=ckpts,

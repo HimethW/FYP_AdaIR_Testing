@@ -61,14 +61,14 @@ def main():
         if step is not None and per_epoch and os.path.exists(os.path.join(args.run, "args.json")):
             with open(os.path.join(args.run, "args.json")) as f:
                 a = json.load(f)
-            target = math.ceil(args.epochs * per_epoch / (a["batch"] * a["accum"]))
+            target = math.ceil(args.epochs * per_epoch / (a["batch"] * a["accum"] * a.get("world", 1)))
             if step >= target:
                 ck = torch.load(os.path.join(args.run, "last.pt"), map_location="cpu", weights_only=False)
                 if ck["step"] >= target:
                     break
                 del ck
         time.sleep(args.poll)
-    epochs = ck["step"] * a["batch"] * a["accum"] / per_epoch
+    epochs = ck["step"] * a["batch"] * a["accum"] * a.get("world", 1) / per_epoch
     os.makedirs(args.out, exist_ok=True)
     wpath = os.path.join(args.out, f"weights_step{ck['step']:07d}.pt")
     torch.save({"model": ck["model"], "ema": ck["ema"], "step": ck["step"], "epoch": ck["epoch"],

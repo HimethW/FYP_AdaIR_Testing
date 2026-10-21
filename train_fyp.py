@@ -12,7 +12,12 @@ Long runs: start detached so they survive session restarts, e.g.
 Ctrl-C / SIGTERM saves runs/<name>/last.pt; running the same command again resumes from it.
 
 Everything for a run goes to runs/<name>/ (gitignored): args.json, train.log, metrics.jsonl, tb/, last.pt,
-snapshots iter_XXXXXXX.pt. One "iteration" = one optimiser step = batch x accum samples.
+snapshots iter_XXXXXXX.pt. One "iteration" = one optimiser step = batch x accum samples (x GPUs).
+
+Multi-GPU (restoration stage, no freezing): start with torchrun. --batch / --accum are per GPU, so 2 GPUs x 4 x 4
+is the same 32 crops per step as 4 x 8 on one GPU (no BatchNorm, so the gradient is the same mean over 32 crops).
+Checkpoints are interchangeable between 1 and N GPUs.
+  torchrun --standalone --nproc_per_node 2 train_fyp.py ... --batch 4 --accum 4
 
 Precision: true fp32 by default (TF32 off; --tf32 / --precision bf16 trade accuracy for speed, results.md A12).
 Defaults follow AdaIR's train.py where it has one (AdamW lr 2e-4, default weight decay 0.01, warmup then
@@ -20,6 +25,8 @@ cosine, 128 crops, effective batch 32 = 4 x 8 accumulation on one 16 GB GPU) and
 stage (net AdamW lr 2e-4 wd 0, classifier AdamW lr 5e-5 wd 1e-4, focal loss, L1 on clean images).
 """
 import argparse
+import contextlib
+import datetime
 import json
 import math
 import os
@@ -29,7 +36,10 @@ import time
 
 import numpy as np
 import torch
+import torch.distributed as dist
+from torch.nn.parallel import DistributedDataParallel
 from torch.utils.data import DataLoader
+from torch.utils.data.distributed import DistributedSampler
 from torch.utils.tensorboard import SummaryWriter
 
 from fyp.data import CLASS_NAMES, LABELS, TrainSet, parse_tasks, worker_init
@@ -165,13 +175,22 @@ def save(path, payload):
 
 def main():
     args = get_args()
+    world = int(os.environ.get("WORLD_SIZE", 1))  # > 1 when started with torchrun
+    rank = int(os.environ.get("RANK", 0))
+    main_proc = rank == 0  # only process 0 logs, validates and saves
+    if world > 1:
+        assert args.stage == "restore" and args.freeze_backbone == 0, "multi-GPU: restore stage without freezing only"
+        torch.cuda.set_device(int(os.environ["LOCAL_RANK"]))
+        dist.init_process_group("nccl", timeout=datetime.timedelta(hours=1))  # others wait while process 0 validates
+    args.world = world
     run = os.path.join(args.runs, args.name)
     os.makedirs(run, exist_ok=True)
-    log = Logger(os.path.join(run, "train.log"))
+    log = Logger(os.path.join(run, "train.log")) if main_proc else (lambda msg: None)
     if args.wd is None:
         args.wd = 0.0 if args.stage == "dcpt" else 0.01
-    with open(os.path.join(run, "args.json"), "w") as f:
-        json.dump(vars(args), f, indent=1)
+    if main_proc:
+        with open(os.path.join(run, "args.json"), "w") as f:
+            json.dump(vars(args), f, indent=1)
     log("args: " + json.dumps(vars(args)))
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
@@ -211,11 +230,12 @@ def main():
         if dcpt is not None:
             n += sum(p.numel() for p in dcpt.classifier.parameters())
         log(f"backbone {'frozen' if frozen else 'trainable'}: {n / 1e6:.2f}M trainable params")
-    ema = EMA(model, args.ema) if args.ema > 0 else None
+    ema = EMA(model, args.ema) if args.ema > 0 and main_proc else None
 
     data = TrainSet(counts, root=args.data, patch=args.patch, seed=args.seed)
-    log(f"train set: {len(data)} samples / epoch from {counts}; {args.iters} iters x {args.batch * args.accum} "
-        f"= {args.iters * args.batch * args.accum / len(data):.2f} epochs")
+    per_step = args.batch * args.accum * world
+    log(f"train set: {len(data)} samples / epoch from {counts}; {args.iters} iters x {per_step} "
+        f"= {args.iters * per_step / len(data):.2f} epochs" + (f" ({world} GPUs)" if world > 1 else ""))
     sets = test_sets(args.data)
     val_names = resolve(VAL_SETS, sets)
     log(f"params: {sum(p.numel() for p in model.parameters()) / 1e6:.2f}M; val sets: {val_names}")
@@ -253,9 +273,11 @@ def main():
 
     frozen = args.freeze_backbone != 0 and (args.freeze_backbone < 0 or step < args.freeze_backbone)
     set_backbone_frozen(frozen)
+    # forward / backward go through `net`; `model` stays the plain module (state dicts, EMA, validation)
+    net = DistributedDataParallel(model, device_ids=[torch.cuda.current_device()]) if world > 1 else model
 
-    tb = SummaryWriter(os.path.join(run, "tb"))
-    metrics_f = open(os.path.join(run, "metrics.jsonl"), "a")
+    tb = SummaryWriter(os.path.join(run, "tb")) if main_proc else None
+    metrics_f = open(os.path.join(run, "metrics.jsonl"), "a") if main_proc else None
 
     def write_metrics(d):
         metrics_f.write(json.dumps({"step": step, **d}) + "\n")
@@ -268,9 +290,14 @@ def main():
         nonlocal epoch
         while True:
             data.set_epoch(epoch)
-            loader = DataLoader(data, batch_size=args.batch, shuffle=True, num_workers=args.workers, pin_memory=True,
-                                drop_last=True, worker_init_fn=worker_init, persistent_workers=False,
-                                generator=torch.Generator().manual_seed(args.seed * 7919 + epoch))
+            sampler = None
+            if world > 1:  # each GPU takes its own share of the epoch's samples
+                sampler = DistributedSampler(data, world, rank, shuffle=True, seed=args.seed * 7919, drop_last=True)
+                sampler.set_epoch(epoch)
+            loader = DataLoader(data, batch_size=args.batch, shuffle=sampler is None, sampler=sampler,
+                                num_workers=args.workers, pin_memory=True, drop_last=True, worker_init_fn=worker_init,
+                                persistent_workers=False,  # per-process seed: different crops / noise on each GPU
+                                generator=torch.Generator().manual_seed(args.seed * 7919 + epoch + 1000003 * rank))
             for b in loader:
                 yield b
             epoch += 1
@@ -288,20 +315,23 @@ def main():
                 set_backbone_frozen(False)
             for o in optimizers:
                 o.zero_grad(set_to_none=True)
-            for _ in range(args.accum):
+            for i in range(args.accum):
                 b = next(stream)
                 lq, gt = b["lq"].to(device, non_blocking=True), b["gt"].to(device, non_blocking=True)
-                with autocast:
-                    if dcpt is not None:
-                        loss, parts = dcpt(lq, gt, b["label"].to(device))
-                    else:
-                        out = model(lq)
-                        if loss_fn is not None:
-                            loss, parts = loss_fn(out.float(), gt)
+                # multi-GPU: gradients are averaged across GPUs only on the last micro-batch
+                sync = net.no_sync() if world > 1 and i < args.accum - 1 else contextlib.nullcontext()
+                with sync:
+                    with autocast:
+                        if dcpt is not None:
+                            loss, parts = dcpt(lq, gt, b["label"].to(device))
                         else:
-                            loss = torch.nn.functional.l1_loss(out.float(), gt)
-                            parts = {"l_pix": loss.detach()}
-                (loss / args.accum).backward()
+                            out = net(lq)
+                            if loss_fn is not None:
+                                loss, parts = loss_fn(out.float(), gt)
+                            else:
+                                loss = torch.nn.functional.l1_loss(out.float(), gt)
+                                parts = {"l_pix": loss.detach()}
+                    (loss / args.accum).backward()
                 parts["loss"] = loss.detach()
                 for k, v in parts.items():
                     acc.setdefault(k, []).append(float(v))
@@ -317,43 +347,53 @@ def main():
                 ema.update(model)
             step += 1
             state["updating"] = False
+            if world > 1:  # a stop signal on any GPU stops all of them at this same step
+                f = torch.tensor([float(stop["flag"])], device=device)
+                dist.all_reduce(f, op=dist.ReduceOp.MAX)
+                stop["flag"] = bool(f.item())
 
-            if step % args.log_every == 0 or step == 1:
+            if main_proc and (step % args.log_every == 0 or step == 1):
                 dt = time.time() - t0
-                m = {f"train/{k}": float(np.mean(v)) for k, v in acc.items()}
+                m = {f"train/{k}": float(np.mean(v)) for k, v in acc.items()}  # process 0's share of the batch
                 m["lr"] = schedulers[0].get_last_lr()[0]
-                m["img_per_s"] = n_img / dt
+                m["img_per_s"] = n_img * world / dt
                 m["epoch"] = epoch
                 m.update(shape_stats(model))
-                eta = (args.iters - step) * args.batch * args.accum / max(m["img_per_s"], 1e-6)
+                eta = (args.iters - step) * per_step / max(m["img_per_s"], 1e-6)
                 log(f"step {step}/{args.iters} ep {epoch} " + " ".join(f"{k.split('/')[-1]} {v:.4g}" for k, v in m.items()
                     if k.startswith("train/")) + f" lr {m['lr']:.2e} {m['img_per_s']:.1f} img/s "
                     f"mem {torch.cuda.max_memory_allocated() / 2 ** 30:.1f}GB eta {eta / 3600:.1f}h")
                 write_metrics(m)
+            if step % args.log_every == 0 or step == 1:
                 acc, t0, n_img = {}, time.time(), 0
 
-            if step % args.val_every == 0 or step == args.iters:
+            validate = step % args.val_every == 0 or step == args.iters
+            if validate and main_proc:
                 if dcpt is not None:
                     top1, per = dcpt_accuracy(dcpt, sets, args.val_n, device)
                     log(f"val dcpt top-1 {top1:.3f} " + " ".join(f"{k} {v:.2f}" for k, v in per.items()))
                     write_metrics({"val/dcpt_top1": top1, **{f"val/dcpt_{k}": v for k, v in per.items()}})
                 else:
-                    net = model
+                    ema_net = model
                     if ema is not None:
-                        net = build_model(args.variant, amp_safe=args.precision == "bf16").to(device)
-                        net.load_state_dict(ema.state)
+                        ema_net = build_model(args.variant, amp_safe=args.precision == "bf16").to(device)
+                        ema_net.load_state_dict(ema.state)
                     log(f"val ({'ema' if ema else 'model'}, first {args.val_n} images per set):")
-                    res = evaluate(net, sets, val_names, device=device, limit=args.val_n, log=log)
+                    res = evaluate(ema_net, sets, val_names, device=device, limit=args.val_n, log=log)
                     write_metrics({f"val/{k}_psnr": v["psnr"] for k, v in res.items()})
-                    if net is not model:
-                        del net
+                    if ema_net is not model:
+                        del ema_net
                     model.train()
                 t0 = time.time()
 
-            if step % args.ckpt_every == 0 or step == args.iters or stop["flag"]:
+            save_now = step % args.ckpt_every == 0 or step == args.iters or stop["flag"]
+            if main_proc and save_now:
                 checkpoint(last)
-            if step % args.keep_every == 0:
+            if main_proc and step % args.keep_every == 0:
                 checkpoint(os.path.join(run, f"iter_{step:07d}.pt"))
+            if world > 1 and (validate or save_now):
+                dist.barrier()
+                t0 = time.time()
     except RuntimeError:
         # A signal to the whole process group (e.g. a shutdown) also kills the data-loader workers, and the
         # loader raises that wherever the main process happens to be. If a stop was requested, the model is at
@@ -367,10 +407,13 @@ def main():
         log(f"data workers stopped; saving step {step}")
 
     stream.close()  # shuts the data-loader workers down cleanly
-    checkpoint(last)
-    log(f"stopped at step {step}" if stop["flag"] else f"finished {step} iterations")
-    metrics_f.close()
-    tb.close()
+    if main_proc:
+        checkpoint(last)
+        log(f"stopped at step {step}" if stop["flag"] else f"finished {step} iterations")
+        metrics_f.close()
+        tb.close()
+    if world > 1:
+        dist.destroy_process_group()
     return 3 if stop["flag"] else 0  # non-zero when interrupted, so chained stages don't continue
 
 
