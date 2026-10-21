@@ -584,3 +584,15 @@ raw version we got from the original repo. train on the dataset for 20 epochs as
     `score_gen`, defined but never called). So the original model's mask-size predictor is never trained at all,
     which is another face of the mask bug. Fix: `find_unused_parameters=True`; those grads stay None, so AdamW
     skips them exactly as on one GPU. Re-test running.
+- 2026-10-21 19:20: NaN diagnosis on Elgin (NaN detector in train_fyp.py: `--on_nonfinite stop|skip`, logs the
+  tasks of each micro-batch and the non-finite tensors, saves the step's batches + weights for
+  `tools/repro_nonfinite.py`):
+  - 1 GPU: clean. 60 steps (seed 0, GPU0) + 100 steps (seed 1, GPU0), gradient norm 0.08-0.77 throughout.
+    Validation unchanged from the released model. On a free GPU0 the speed is **6.8 img/s**: the 4.2 img/s
+    benchmark had been sharing GPU0 with a notebook job. So 1 GPU = ~5.4 days for 20 epochs.
+  - 2 GPUs (DDP): in 60 steps, garbage averaged gradients at steps 19 and 21 (norm 1e13 / 2e12, finite, applied,
+    no clipping), a NaN gradient at step 30 and inf at 33 / 50 / 55 (all skipped). Every GPU's own micro-batch
+    losses looked normal, except one 1.3e30 loss on GPU1 at step 33, after the bad updates. 13.4 img/s (1.95x).
+  - Reading: not the data, not the model. Suspects: corrupted GPU-to-GPU transfers (NCCL P2P over PCIe) or a faulty
+    GPU1 (the 1-GPU runs only used GPU0). Next: `tools/check_nccl.py` (all-reduce results checked against a local
+    sum, P2P on / off), GPU1 alone, 2 GPUs with NCCL_P2P_DISABLE=1.
