@@ -33,6 +33,7 @@ import os
 import signal
 import sys
 import time
+from collections import Counter
 
 import numpy as np
 import torch
@@ -79,6 +80,9 @@ def get_args():
                    help="allow TF32 in convs / matmuls (~18%% faster, 10-bit multiply inputs); default off = true fp32")
     p.add_argument("--ema", type=float, default=0.0, help="EMA decay, 0 = off (DCPT's configs use 0.999)")
     p.add_argument("--clip", type=float, default=0.0, help="grad-norm clip, 0 = off")
+    p.add_argument("--on_nonfinite", choices=("stop", "skip"), default="stop",
+                   help="a NaN / inf gradient: stop (save the last good weights) or skip that update (stops after 20 "
+                        "in a row); either way it is logged, and a NaN loss also dumps its batch to the run folder")
     p.add_argument("--init", default=None, help="start from these weights (e.g. a DCPT run's last.pt)")
     p.add_argument("--init_backbone", action="store_true",
                    help="from --init load only the backbone (+ para2), all AFLB weights start fresh")
@@ -312,6 +316,10 @@ def main():
     t0, n_img = time.time(), 0
     model.train()
     state = {"updating": False}
+    n_bad, n_dumps = 0, 0  # non-finite updates in a row; NaN-loss batches dumped by this process
+
+    def report(msg):  # every process: other GPUs have no train.log, so print to the shared console
+        log(msg) if main_proc else print(f"[rank {rank}] {msg}", flush=True)
     try:
         while step < args.iters and not stop["flag"]:
             if frozen and args.freeze_backbone > 0 and step >= args.freeze_backbone:
@@ -319,6 +327,7 @@ def main():
                 set_backbone_frozen(False)
             for o in optimizers:
                 o.zero_grad(set_to_none=True)
+            seen = []  # (micro-batch, loss, tasks) of this step, reported if its gradient is non-finite
             for i in range(args.accum):
                 b = next(stream)
                 lq, gt = b["lq"].to(device, non_blocking=True), b["gt"].to(device, non_blocking=True)
@@ -340,6 +349,36 @@ def main():
                 for k, v in parts.items():
                     acc.setdefault(k, []).append(float(v))
                 n_img += lq.shape[0]
+                seen.append((i, acc["loss"][-1], b["task"]))
+                if not math.isfinite(acc["loss"][-1]) and n_dumps < 3:
+                    n_dumps += 1
+                    path = os.path.join(run, f"nonfinite_r{rank}_s{step + 1:07d}_m{i}.pt")
+                    dump = {"lq": lq.cpu(), "gt": gt.cpu(), "task": b["task"], "step": step + 1, "micro": i}
+                    if n_dumps == 1:  # the weights it failed with (not yet updated), to reproduce it offline
+                        dump["model"] = {k: v.cpu() for k, v in model.state_dict().items()}
+                    save(path, dump)
+                    report(f"NaN / inf loss at step {step + 1}, micro-batch {i}: tasks {dict(Counter(b['task']))}, "
+                           f"lq finite {bool(torch.isfinite(lq).all())} "
+                           f"[{float(lq.min()):.3g}, {float(lq.max()):.3g}], "
+                           f"gt finite {bool(torch.isfinite(gt).all())}; batch saved to {path}")
+            # gradients are already averaged across GPUs here, so every process takes the same decision
+            grads = [p.grad for p in model.parameters() if p.grad is not None]
+            gnorm = float(torch.linalg.vector_norm(torch.stack(torch._foreach_norm(grads)))) if grads else 0.0
+            if not math.isfinite(gnorm):
+                n_bad += 1
+                bad = [n for n, p in model.named_parameters()
+                       if p.grad is not None and not torch.isfinite(p.grad).all()]
+                report(f"non-finite gradient at step {step + 1} (norm {gnorm}) in {len(bad)} tensors, e.g. {bad[:5]}; "
+                       "this process's micro-batches: "
+                       + "; ".join(f"{i} loss {v:.4g} {dict(Counter(t))}" for i, v, t in seen))
+                if args.on_nonfinite == "stop" or n_bad > 20:
+                    log(f"stopping before the update: last.pt keeps the weights of step {step}")
+                    stop["flag"] = True
+                    break
+                log(f"update skipped ({n_bad} in a row)")
+                continue
+            n_bad = 0
+            acc.setdefault("gnorm", []).append(gnorm)
             state["updating"] = True
             if args.clip > 0:
                 torch.nn.utils.clip_grad_norm_([p for p in model.parameters() if p.requires_grad], args.clip)
