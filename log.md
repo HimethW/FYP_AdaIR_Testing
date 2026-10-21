@@ -537,3 +537,7 @@ User: create /home/minura/Himeth/results (outside the repo; holds our results) a
   /home/minura/miniforge3 is gone). The write and speed tests were not run: Elgin's auto mode blocked writes on the
   mount until the user confirms. With the new folder, disk space no longer rules Elgin out (the 2026-10-20 decision
   rejected it for its 12 GB disk); nothing has been set up there yet.
+- 2026-10-21 17:55: with the user's OK ("writing inside /mnt/minura/minura/Himeth on Elgin is allowed"), the Elgin
+  write and speed tests ran inside that folder: writing works (files owned by minura); 2 GiB direct I/O writes at
+  1.5 GB/s and reads at 2.0 GB/s; 2,000 x 200 KB files in 9.5 s, which was mostly the cost of generating the random
+  test data, so many small PNGs are not a problem. All test files were removed and the folder is empty again (413 GB free).
