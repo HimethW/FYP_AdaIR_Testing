@@ -521,3 +521,24 @@ Reading: after 10 epochs the new blocks still add about +0.03 dB on 4 of 6 sets 
 (6 images). The output barely depends on them, and para1 is still ~0.002-0.009. Our gains over the released model so
 far come from fine-tuning the backbone (plus the FFT loss / DCPT), which the baseline also gets (except FFT loss / DCPT).
 The ours-vs-baseline comparison decides whether ours ends up ahead.
+
+### A19. Ours vs the baseline at matched steps (in-training validation, EMA, first 10 images per set)
+Both fine-tune from the released adair3d.ckpt on aio3_mix with the same schedule (32 crops / step). Ours = shaped
+bands + DCPT warm-up stage before step 0 + L1 + 0.1 FFT; baseline = original AdaIR, full released weights, L1
+(Elgin). Start = the released model (baseline 60-step bench on Elgin; first three sets also measured on qbits:
+31.442 / 38.394 / 29.970).
+
+| Step (epochs) | Model | bsd68_s25 | rain100l | sots_unseen | haze_noise25 | rain_noise25 | haze_rain | cdd11 |
+|---|---|---|---|---|---|---|---|---|
+| 0 | released | 31.44 | 38.40 | 29.96 | 16.01 | 24.61 | 21.06 | 19.34 |
+| 5,000 (1.0) | baseline | 31.118 | 38.198 | 29.563 | 25.820 | 29.905 | 26.410 | 25.659 |
+| 5,000 (1.0) | ours | 31.121 | 38.648 | 29.815 | 25.691 | 30.076 | 26.976 | 26.062 |
+| 5,000 | ours - baseline | +0.003 | **+0.450** | **+0.252** | -0.129 | +0.171 | **+0.566** | **+0.403** |
+
+Ours (for later rows): 10k 31.274 / 38.709 / 29.926 / 25.940 / 30.230 / 27.607 / 27.594; 20k 31.291 / 38.778 / 30.336 /
+25.413 / 30.325 / 27.823 / 29.012; 30k 31.354 / 38.837 / 29.942 / 25.107 / 30.361 / 27.627 / 29.323; 40k 31.335 /
+38.827 / 30.326 / 24.962 / 30.380 / 28.275 / 29.861; 50k 31.386 / 38.871 / 30.003 / 25.050 / 30.410 / 28.053 / 30.576.
+At step 5,000 ours is ahead on 5 of 7 sets (rain +0.45, haze +0.25, haze+rain +0.57 / +0.40), equal on noise,
+behind on haze+noise (-0.13). The baseline dipped below the released model on the single tasks (-0.3 to -0.4 dB);
+ours didn't. Caveats: 10 images per set; ours also had the 1-epoch DCPT warm-up before step 0. Since the new blocks
+barely matter (A18), the edge more likely comes from the FFT loss / DCPT stage than from the shaped bands.
