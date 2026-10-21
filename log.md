@@ -628,3 +628,10 @@ session; qbits' dashboard does not see this run.
   after its 8,004 resume.
 - 2026-10-21 20:40: full-set CPU evaluation of step 50k stopped (user: "i dont need an evaluation"); the in-training validation is enough for now.
   A/B numbers: 6.78 img/s without vs 6.85 with --cudnn_benchmark (+1%, +0.2 GB, validation 55 -> 70 s, identical losses / val). Baseline resumed 20:19 IST at step 736 (new PIDs: launcher 1066707, python 1066717); step 800 clean, 6.8 img/s, ETA 130 h (~2026-10-27 06:30 IST).
+- 2026-10-22 02:10: user: don't interrupt the runs; note ours vs the baseline at every epoch, and at the end pick the
+  epoch where ours beats the baseline most (the baseline may catch up later). So every epoch's weights must survive:
+  train_fyp.py keeps full snapshots only every 20k steps and overwrites last.pt every 1k. Added `tools/keep_epochs.py`
+  (watches train.log; at each multiple of 5,000 copies model + EMA from last.pt, ~0.25 GB, no optimiser). Running
+  detached on qbits for ours (runs/ours_ft/epochs; already missed 5k-15k, 25k-35k, 45k-55k, which leaves
+  iter_0020000 / iter_0040000 from before) and on Elgin for the baseline (runs/baseline_ft/epochs, from step 5,000).
+  Disk: ~2 GB more on qbits (72 GB free), ~4.5 GB on Elgin (413 GB free), so per epoch, not every 2.
