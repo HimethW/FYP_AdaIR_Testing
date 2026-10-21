@@ -613,3 +613,11 @@ gradient. GPU0 runs at 86 C under load. GPU1 has another job on the same account
 Resume after any stop (on Elgin): `cd /mnt/minura/minura/Himeth/AdaIR && setsid nohup bash scripts/run_baseline.sh
 >> runs/baseline.out 2>&1 &` (add `GPUS=0,1` for 2 GPUs once that is verified). Monitoring is through the Elgin
 session; qbits' dashboard does not see this run.
+- 2026-10-21 20:20: 10-epoch usage check (results.md A18): the new blocks still barely matter (+0.00 to +0.05 dB,
+  -0.22 on CDD-11), para1 still ~0.002-0.009. The user asked whether ours already beats the released paper results:
+  on the 10-image validation at step 50k, ours is -0.06 dB on BSD68 s25, +0.48 Rain100L, +0.03 SOTS unseen, +6 to +11
+  dB on the mixtures (which the released model never saw). A full-set CPU evaluation of step 50k (`eval_fyp.py
+  --device cpu`, new option) is running into runs/eval_ours_ft/. Added `tools/check_branch_usage.py`.
+- 2026-10-21 20:15: the user asked for results as fast as possible and is fine with 1 GPU. Added `--cudnn_benchmark`
+  (cuDNN autotuning, still fp32). The baseline was paused at step 736 (SIGTERM, saved) for an A/B speed test on
+  Elgin; it resumes with the flag if that is >= 3% faster.

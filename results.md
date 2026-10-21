@@ -498,3 +498,26 @@ fre2 2/8/30/60 -> 9/4/31/56; fre3 1/6/38/56 -> 1/5/38/55.
 - Per-degradation adaptation is mostly the dot (it follows the image's 50%-energy radius: fre1 dot_r 0.17 haze,
   0.19 clean / rain, 0.24 noise s50, 0.38 CDD-11 haze+rain) plus 1-3.5 deg angle shifts for haze types; the
   star / lobe shapes are nearly the same for every degradation, i.e. the shape generator adapts very little per image.
+
+### A18. Are the new frequency blocks used? ours_ft at step 50,000 (10.0 epochs) (2026-10-21 20:20)
+Same check as A16 (`tools/check_branch_usage.py`, EMA weights, first 6 images per set, centre 256 crops, CPU; numbers
+in /home/minura/Himeth/results/branch_usage/step50000.json). "Off" = para1 = 0 in all three AFLBs.
+
+| Set | Branches on | Branches off | On - off | (A16, 4.8 ep) |
+|---|---|---|---|---|
+| bsd68_s25 | 31.133 | 31.104 | +0.030 | +0.029 |
+| rain100l | 40.065 | 40.043 | +0.021 | +0.013 |
+| sots_unseen | 31.204 | 31.156 | +0.048 | +0.011 |
+| haze_noise25_unseen | 25.570 | 25.580 | -0.010 | -0.017 |
+| rain_noise25 | 30.941 | 30.939 | +0.001 | +0.001 |
+| haze_rain_cdd11 | 33.307 | 33.528 | **-0.221** | -0.024 |
+
+AFLB change to the decoder feature |agg * para1| / |y * para2|: fre1 0.041, fre2 0.032, fre3 0.049 (A16: 0.093 /
+0.016 / 0.047). para1 mean |.|: 0.0019 / 0.0092 / 0.0085 (A16: 0.0020 / 0.0072 / 0.0060). Train loss per 5k-step
+window: 0.1182, 0.1050, 0.1036, 0.1026, 0.1015, 0.1018, 0.1004, 0.1000, 0.0995, 0.0990 (still falling slowly). Band
+areas from the last training batch (dot / star / lobe / rest): fre1 6 / 0.2 / 12 / 82%, fre2 13 / 2 / 29 / 55%, fre3
+2 / 5 / 40 / 54%. The fre1 star has nearly vanished (0.2%).
+Reading: after 10 epochs the new blocks still add about +0.03 dB on 4 of 6 sets and cost 0.22 dB on CDD-11 haze+rain
+(6 images). The output barely depends on them, and para1 is still ~0.002-0.009. Our gains over the released model so
+far come from fine-tuning the backbone (plus the FFT loss / DCPT), which the baseline also gets (except FFT loss / DCPT).
+The ours-vs-baseline comparison decides whether ours ends up ahead.

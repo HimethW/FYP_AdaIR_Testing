@@ -31,6 +31,7 @@ def main():
     p.add_argument("--save_images", default=None)
     p.add_argument("--out", default=None)
     p.add_argument("--data", default="data")
+    p.add_argument("--device", default="cuda", help="cuda, or cpu (e.g. while a training run holds the GPU)")
     args = p.parse_args()
 
     torch.backends.cudnn.allow_tf32 = False  # true fp32 inference
@@ -41,12 +42,13 @@ def main():
         raise SystemExit("--variant is needed for this checkpoint")
     model = build_model(variant)
     _, missing, unexpected = load_weights(model, args.ckpt, use_ema=args.ema)
-    model = model.cuda().eval()
+    model = model.to(args.device).eval()
     sets = test_sets(args.data)
     names = resolve(args.sets, sets)
     print(f"{args.ckpt} ({variant}{', ema' if args.ema else ''}), protocol {args.protocol}, fp32")
     t0 = time.time()
-    res = evaluate(model, sets, names, protocol=args.protocol, limit=args.limit, save_dir=args.save_images)
+    res = evaluate(model, sets, names, device=args.device, protocol=args.protocol, limit=args.limit,
+                   save_dir=args.save_images)
     print(f"done in {time.time() - t0:.0f}s")
     if args.out:
         os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
