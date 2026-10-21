@@ -18,7 +18,8 @@ Layout produced (AdaIR defaults, options.py / test.py):
 
 Sources (checked 2026-10-19; see log.md): Google Drive IDs from AdaIR's INSTALL.md (Hugging Face
 mirror laoduanaaa/Image_Restoration_Datasets as fallback for BSD400 / WED), RESIDE on Box (official),
-CBSD68 on GitHub, O-HAZE / NH-HAZE from ETH, CDD-11 from its official Hugging Face repo gy65896/CDD-11
+CBSD68 on GitHub, Kodak24 from r0k.us, O-HAZE / NH-HAZE from ETH, CDD-11 from its official Hugging Face
+repo gy65896/CDD-11
 (only the haze_rain + clear folders are read, over HTTP Range, instead of the 26 GB zips).
 
 Usage: python tools/prepare_data.py [--steps bsd400 wed ...] [--root data]
@@ -221,6 +222,17 @@ def step_bsd68(root):
     log(f"bsd68: {count(dest)} images")
 
 
+def step_kodak24(root):
+    dest = os.path.join(root, "test/denoise/kodak24")
+    if count(dest) == 24:
+        return log("kodak24: done")
+    for i in range(1, 25):  # 24 PNGs, 768x512 (log.md: "Downloaded released checkpoints and Kodak24")
+        out = os.path.join(dest, f"kodim{i:02d}.png")
+        if not os.path.exists(out):
+            curl(f"https://r0k.us/graphics/kodak/kodak/kodim{i:02d}.png", out)
+    log(f"kodak24: {count(dest)} images")
+
+
 def step_sots(root):
     dest = os.path.join(root, "test/dehaze")
     if count(f"{dest}/input") == 500 and count(f"{dest}/target") == 492:
@@ -321,8 +333,8 @@ def step_cdd11(root):
 
 
 STEPS = {"bsd400": step_bsd400, "urban100": step_urban100, "rain_train": step_rain_train,
-         "rain_test": step_rain_test, "bsd68": step_bsd68, "sots": step_sots, "wed": step_wed,
-         "ots": step_ots, "ohaze": step_ohaze, "nhhaze": step_nhhaze, "cdd11": step_cdd11}
+         "rain_test": step_rain_test, "bsd68": step_bsd68, "kodak24": step_kodak24, "sots": step_sots,
+         "wed": step_wed, "ots": step_ots, "ohaze": step_ohaze, "nhhaze": step_nhhaze, "cdd11": step_cdd11}
 
 
 def main():
