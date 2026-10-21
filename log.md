@@ -627,3 +627,4 @@ session; qbits' dashboard does not see this run.
   iterations (99,730 x 32 crops = 20.0 epochs of samples) and every epoch is a random draw anyway. Same as ours
   after its 8,004 resume.
 - 2026-10-21 20:40: full-set CPU evaluation of step 50k stopped (user: "i dont need an evaluation"); the in-training validation is enough for now.
+  A/B numbers: 6.78 img/s without vs 6.85 with --cudnn_benchmark (+1%, +0.2 GB, validation 55 -> 70 s, identical losses / val). Baseline resumed 20:19 IST at step 736 (new PIDs: launcher 1066707, python 1066717); step 800 clean, 6.8 img/s, ETA 130 h (~2026-10-27 06:30 IST).
