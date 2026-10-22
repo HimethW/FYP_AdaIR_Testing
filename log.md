@@ -641,3 +641,6 @@ session; qbits' dashboard does not see this run.
   Remaining: 28,641 steps = ~19 h of training. Resume when the user says (check the GPU is free first):
   `setsid nohup bash scripts/run_ours.sh >> runs/ours.out 2>&1 &` (stage 1 returns at once, stage 2 continues).
   The baseline on Elgin is not affected.
+- 2026-10-22 12:02: GPU free again (no processes, 7 MiB); ours resumed from step 71,089 with the same launcher. Step
+  71,100 clean (loss 0.1025, gnorm 0.47), 12.7 img/s at the start, ETA ~20 h -> ~2026-10-23 08:00. This resume runs the
+  current train_fyp.py: same single-GPU training, plus the NaN detector (stop mode) and the gradient norm in the log.
