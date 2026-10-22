@@ -635,3 +635,9 @@ session; qbits' dashboard does not see this run.
   detached on qbits for ours (runs/ours_ft/epochs; already missed 5k-15k, 25k-35k, 45k-55k, which leaves
   iter_0020000 / iter_0040000 from before) and on Elgin for the baseline (runs/baseline_ft/epochs, from step 5,000).
   Disk: ~2 GB more on qbits (72 GB free), ~4.5 GB on Elgin (413 GB free), so per epoch, not every 2.
+- 2026-10-22 10:10: paused ours at the user's request (a friend needs qbits' GPU): SIGTERM to the training process,
+  which finished its step and saved `last.pt` at **step 71,089** (14.2 epochs, EMA included), exit code 3; the
+  launcher stopped; GPU free (7 MiB). The epoch watcher (keep_epochs.py) and dashboard keep running on the CPU.
+  Remaining: 28,641 steps = ~19 h of training. Resume when the user says (check the GPU is free first):
+  `setsid nohup bash scripts/run_ours.sh >> runs/ours.out 2>&1 &` (stage 1 returns at once, stage 2 continues).
+  The baseline on Elgin is not affected.
