@@ -590,3 +590,28 @@ epochs without * only have these validation numbers. Released model on the same 
 Best mean at epochs 18-20 (~30.72-30.75); flat from epoch 17 on (every set within +-0.15 dB). haze_noise25 peaked at
 epoch 2 (25.940) and drifted down to ~24.6-24.8; cdd11 rose all the way (27.6 at epoch 2 -> 31.3).
 Single tasks vs the released model (same 10 images), epoch 20: noise s25 -0.02, Rain100L +0.49, SOTS unseen +0.22.
+
+### A21. Full test-set evaluation (the standard numbers for the paper) (2026-10-23)
+`eval_fyp.py --sets main` (every image, AdaIR's test protocol: centre crop to a multiple of 16, true fp32, EMA weights
+for our runs). PSNR / SSIM. Released = adair3d.ckpt measured here (runs/eval_released/adair3d_main.json); ours =
+runs/ours_ft/epochs/step_0099730.pt, epoch 20 (runs/eval_ours_ft/epoch20_main.json). Baseline column to follow.
+
+| Set | n | Paper (AdaIR, ICLR'25 Table 1) | Released (measured) | Ours, epoch 20 | Ours - released |
+|---|---|---|---|---|---|
+| BSD68 s15 | 68 | 34.12 / 0.935 | 34.119 / 0.9353 | 33.746 / 0.9350 | -0.373 |
+| BSD68 s25 | 68 | 31.45 / 0.892 | 31.462 / 0.8921 | 31.152 / 0.8917 | -0.310 |
+| BSD68 s50 | 68 | 28.19 / 0.802 | 28.182 / 0.8019 | 27.946 / 0.8029 | -0.236 |
+| Rain100L | 100 | 38.64 / 0.983 | 38.641 / 0.9830 | 37.863 / 0.9826 | -0.778 |
+| SOTS outdoor (all) | 500 | 31.06 / 0.980 | 31.062 / 0.9802 | 31.220 / 0.9809 | +0.158 |
+| SOTS unseen | 424 | | 30.071 / 0.9785 | 30.209 / 0.9793 | +0.138 |
+| SOTS seen in OTS | 76 | | 36.590 / 0.9894 | 36.861 / 0.9897 | +0.271 |
+| Haze + noise s25 (all) | 500 | | 15.741 / 0.7173 | 24.933 / 0.8438 | +9.192 |
+| Haze + noise s25 (unseen) | 424 | | 15.700 / 0.7159 | 24.444 / 0.8397 | +8.744 |
+| Rain + noise s25 | 100 | | 24.510 / 0.7374 | 30.744 / 0.8735 | +6.234 |
+| Haze + rain (all) | 500 | | 20.457 / 0.8096 | 29.006 / 0.9545 | +8.549 |
+| Haze + rain (unseen) | 424 | | 20.336 / 0.8073 | 28.367 / 0.9526 | +8.031 |
+| Haze + rain CDD-11 | 200 | | 18.670 / 0.7703 | 29.549 / 0.9615 | +10.879 |
+
+The first-10-image subset reproduces the in-training validation exactly (31.426 / 38.885 / 30.194), but it was not
+representative: on all of Rain100L ours is -0.78 dB vs released (+0.49 on the first 10), on BSD68 s25 -0.31 (-0.02).
+The 10-image validation tracks trends, not final numbers.
