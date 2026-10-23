@@ -641,3 +641,26 @@ Ours (epoch 20) beats the baseline (epoch 6) on 11 of 13 sets: single tasks +0.1
 +0.71..+0.78, CDD-11 +2.47; behind only on haze+noise (-0.28 all / -0.37 unseen). The fine-tuned baseline loses more
 single-task quality than ours (rain -1.08 vs released, ours -0.78), so that cost comes from multi-degradation
 fine-tuning. Caveat: epochs not matched (6 vs 20); ours at epoch 8 is being evaluated, and the baseline continues to 20.
+
+### A22. Matched comparison, full test sets: baseline epoch 6 vs ours epoch 8 and epoch 20 (2026-10-23 12:05)
+Same protocol as A21 (every image, AdaIR test protocol, fp32, EMA). Ours epoch 8 = runs/ours_ft/iter_0040000.pt
+(runs/eval_ours_ft/epoch8_main.json); epoch 8 is the closest saved epoch of ours to the baseline's 6. PSNR / SSIM;
+differences are PSNR (dB) vs the baseline.
+
+| Degradation | Released (measured) | Baseline, epoch 6 | Ours, epoch 8 | Ours ep8 − baseline | Ours, epoch 20 | Ours ep20 − baseline |
+|---|---|---|---|---|---|---|
+| Noise σ15 (BSD68) | 34.119 / 0.9353 | 33.619 / 0.9327 | 33.624 / 0.9344 | +0.005 | 33.746 / 0.9350 | +0.127 |
+| Noise σ25 (BSD68) | 31.462 / 0.8921 | 31.035 / 0.8882 | 31.040 / 0.8912 | +0.005 | 31.152 / 0.8917 | +0.117 |
+| Noise σ50 (BSD68) | 28.182 / 0.8019 | 27.695 / 0.7939 | 27.670 / 0.8008 | -0.025 | 27.946 / 0.8029 | +0.251 |
+| Rain (Rain100L) | 38.641 / 0.9830 | 37.566 / 0.9812 | 37.862 / 0.9823 | +0.296 | 37.863 / 0.9826 | +0.297 |
+| Haze (SOTS, all 500) | 31.062 / 0.9802 | 30.865 / 0.9793 | 31.224 / 0.9807 | +0.359 | 31.220 / 0.9809 | +0.355 |
+| Haze + noise σ25 | 15.741 / 0.7173 | 25.209 / 0.8361 | 24.992 / 0.8432 | -0.217 | 24.933 / 0.8438 | -0.276 |
+| Rain + noise σ25 | 24.510 / 0.7374 | 30.313 / 0.8657 | 30.659 / 0.8725 | +0.346 | 30.744 / 0.8735 | +0.431 |
+| Haze + rain (ours) | 20.457 / 0.8096 | 28.225 / 0.9431 | 28.833 / 0.9528 | +0.608 | 29.006 / 0.9545 | +0.781 |
+| Haze + rain (CDD-11) | 18.670 / 0.7703 | 27.077 / 0.9445 | 28.089 / 0.9576 | +1.012 | 29.549 / 0.9615 | +2.472 |
+| Average, single tasks (5) | 32.693 | 32.156 | 32.284 | +0.128 | 32.385 | +0.229 |
+| Average, mixtures (4) | 19.845 | 27.706 | 28.143 | +0.437 | 28.558 | +0.852 |
+
+At (nearly) matched epochs ours wins 7 of 9 degradations, ties noise s15 / s25 (+0.005) and loses haze+noise
+(-0.22 PSNR, but higher SSIM 0.8432 vs 0.8361) and noise s50 by 0.03. Epoch 8 -> 20 adds noise (+0.12..0.28) and
+CDD-11 (+1.46); rain and SOTS were already at their final level by epoch 8.
