@@ -615,3 +615,29 @@ runs/ours_ft/epochs/step_0099730.pt, epoch 20 (runs/eval_ours_ft/epoch20_main.js
 The first-10-image subset reproduces the in-training validation exactly (31.426 / 38.885 / 30.194), but it was not
 representative: on all of Rain100L ours is -0.78 dB vs released (+0.49 on the first 10), on BSD68 s25 -0.31 (-0.02).
 The 10-image validation tracks trends, not final numbers.
+
+Baseline column added (runs/eval_baseline/epoch6_main.json on Elgin; baseline_ft step 30,000 = epoch 6, EMA; Elgin GPU0,
+training paused 50 min for it, no progress lost):
+
+| Set | Paper | Released | Baseline, epoch 6 | Ours, epoch 20 | Ours - baseline |
+|---|---|---|---|---|---|
+| Noise s15 (BSD68) | 34.12 / 0.935 | 34.119 / 0.9353 | 33.619 / 0.9327 | 33.746 / 0.9350 | +0.127 |
+| Noise s25 (BSD68) | 31.45 / 0.892 | 31.462 / 0.8921 | 31.035 / 0.8882 | 31.152 / 0.8917 | +0.117 |
+| Noise s50 (BSD68) | 28.19 / 0.802 | 28.182 / 0.8019 | 27.695 / 0.7939 | 27.946 / 0.8029 | +0.251 |
+| Rain (Rain100L) | 38.64 / 0.983 | 38.641 / 0.9830 | 37.566 / 0.9812 | 37.863 / 0.9826 | +0.297 |
+| Haze (SOTS, all 500) | 31.06 / 0.980 | 31.062 / 0.9802 | 30.865 / 0.9793 | 31.220 / 0.9809 | +0.355 |
+| Haze (SOTS, 424 unseen) |  | 30.071 / 0.9785 | 29.848 / 0.9776 | 30.209 / 0.9793 | +0.361 |
+| Haze (SOTS, 76 seen in OTS) |  | 36.590 / 0.9894 | 36.540 / 0.9889 | 36.861 / 0.9897 | +0.321 |
+| Haze + noise s25 (all 500) |  | 15.741 / 0.7173 | 25.209 / 0.8361 | 24.933 / 0.8438 | -0.276 |
+| Haze + noise s25 (424 unseen) |  | 15.700 / 0.7159 | 24.809 / 0.8323 | 24.444 / 0.8397 | -0.365 |
+| Rain + noise s25 |  | 24.510 / 0.7374 | 30.313 / 0.8657 | 30.744 / 0.8735 | +0.431 |
+| Haze + rain (all 500) |  | 20.457 / 0.8096 | 28.225 / 0.9431 | 29.006 / 0.9545 | +0.781 |
+| Haze + rain (424 unseen) |  | 20.336 / 0.8073 | 27.658 / 0.9408 | 28.367 / 0.9526 | +0.709 |
+| Haze + rain (CDD-11) |  | 18.670 / 0.7703 | 27.077 / 0.9445 | 29.549 / 0.9615 | +2.472 |
+| Avg, paper 5 (s15/25/50, rain, SOTS all) | 32.69 / 0.918 | 32.693 | 32.156 | 32.385 | +0.229 |
+| Avg, 4 mixtures (all) | | 19.845 | 27.706 | 28.558 | +0.852 |
+
+Ours (epoch 20) beats the baseline (epoch 6) on 11 of 13 sets: single tasks +0.12..+0.36, rain+noise +0.43, haze+rain
++0.71..+0.78, CDD-11 +2.47; behind only on haze+noise (-0.28 all / -0.37 unseen). The fine-tuned baseline loses more
+single-task quality than ours (rain -1.08 vs released, ours -0.78), so that cost comes from multi-degradation
+fine-tuning. Caveat: epochs not matched (6 vs 20); ours at epoch 8 is being evaluated, and the baseline continues to 20.
