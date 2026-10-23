@@ -644,3 +644,11 @@ session; qbits' dashboard does not see this run.
 - 2026-10-22 12:02: GPU free again (no processes, 7 MiB); ours resumed from step 71,089 with the same launcher. Step
   71,100 clean (loss 0.1025, gnorm 0.47), 12.7 img/s at the start, ETA ~20 h -> ~2026-10-23 08:00. This resume runs the
   current train_fyp.py: same single-GPU training, plus the NaN detector (stop mode) and the gradient norm in the log.
+
+### FINISHED (2026-10-23 07:18): ours_ft, 20 epochs
+99,730 iterations done, exit 0, no non-finite gradient in the whole run. Final validation (EMA, 10 images): 31.426 /
+38.885 / 30.194 / 24.648 / 30.426 / 28.156 / 31.328 (mean 30.723). Every validation is in results.md A20.
+Weights kept: iter_0020000 / 0040000 / 0060000 / 0080000.pt (full) and runs/ours_ft/epochs/step_00{60..95}000.pt +
+step_0099730.pt (model + EMA; the final one copied from last.pt by hand). No weights for epochs 1-3, 5-7, 9-11.
+qbits GPU is free (7 MiB). The epoch watcher exited with the run. The baseline on Elgin continues (~Oct 27). Next steps
+are the user's call ("wait till we are done tomorrow. then i will tell next steps").

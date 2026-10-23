@@ -551,3 +551,36 @@ At step 5,000 ours is ahead on 5 of 7 sets (rain +0.45, haze +0.25, haze+rain +0
 behind on haze+noise (-0.13). The baseline dipped below the released model on the single tasks (-0.3 to -0.4 dB);
 ours didn't. Caveats: 10 images per set; ours also had the 1-epoch DCPT warm-up before step 0. Since the new blocks
 barely matter (A18), the edge more likely comes from the FFT loss / DCPT stage than from the shaped bands.
+
+### A20. Ours (ours_ft) finished: in-training validation at every epoch (EMA, first 10 images per set) (2026-10-23 07:18)
+Finished 99,730 iterations (20.0 epochs) at 2026-10-23 07:18, no non-finite gradient. Weights kept (model + EMA) for
+the epochs marked *: runs/ours_ft/iter_0020000.pt, iter_0040000.pt (full) and runs/ours_ft/epochs/step_*.pt;
+epochs without * only have these validation numbers. Released model on the same images: 31.442 / 38.394 / 29.970 /
+16.01 / 24.61 / 21.06 / 19.34.
+
+| Step | Epoch | bsd68_s25 | rain100l | sots_unseen | haze_noise25 | rain_noise25 | haze_rain | cdd11 | mean 7 |
+|---|---|---|---|---|---|---|---|---|---|
+| 5,000 | 1.0 | 31.121 | 38.648 | 29.815 | 25.691 | 30.076 | 26.976 | 26.062 | 29.770 |
+| 10,000 | 2.0 | 31.274 | 38.709 | 29.926 | 25.940 | 30.230 | 27.607 | 27.594 | 30.183 |
+| 15,000 | 3.0 | 31.288 | 38.773 | 30.404 | 25.749 | 30.281 | 27.902 | 28.991 | 30.484 |
+| 20,000 | 4.0* | 31.291 | 38.778 | 30.336 | 25.413 | 30.325 | 27.823 | 29.012 | 30.425 |
+| 25,000 | 5.0 | 31.365 | 38.821 | 30.155 | 24.922 | 30.327 | 27.631 | 29.420 | 30.377 |
+| 30,000 | 6.0 | 31.354 | 38.837 | 29.942 | 25.107 | 30.361 | 27.627 | 29.323 | 30.364 |
+| 35,000 | 7.0 | 31.360 | 38.813 | 30.012 | 25.415 | 30.367 | 27.974 | 29.597 | 30.505 |
+| 40,000 | 8.0* | 31.335 | 38.827 | 30.326 | 24.962 | 30.380 | 28.275 | 29.861 | 30.567 |
+| 45,000 | 9.0 | 31.376 | 38.864 | 30.032 | 25.152 | 30.395 | 28.211 | 30.275 | 30.615 |
+| 50,000 | 10.0 | 31.386 | 38.871 | 30.003 | 25.050 | 30.410 | 28.053 | 30.576 | 30.621 |
+| 55,000 | 11.0 | 31.377 | 38.871 | 29.989 | 25.053 | 30.416 | 27.944 | 30.770 | 30.631 |
+| 60,000 | 12.0* | 31.414 | 38.855 | 30.011 | 24.749 | 30.411 | 27.977 | 31.111 | 30.647 |
+| 65,000 | 13.0* | 31.346 | 38.866 | 29.987 | 25.033 | 30.410 | 28.060 | 30.930 | 30.662 |
+| 70,000 | 14.0* | 31.421 | 38.863 | 30.209 | 24.557 | 30.420 | 28.213 | 30.873 | 30.651 |
+| 75,000 | 15.0* | 31.401 | 38.862 | 30.128 | 24.947 | 30.420 | 28.174 | 30.954 | 30.698 |
+| 80,000 | 16.0* | 31.409 | 38.876 | 30.155 | 24.515 | 30.423 | 28.109 | 31.071 | 30.651 |
+| 85,000 | 17.0* | 31.405 | 38.888 | 30.249 | 24.576 | 30.425 | 28.142 | 31.182 | 30.695 |
+| 90,000 | 18.0* | 31.401 | 38.891 | 30.264 | 24.818 | 30.429 | 28.151 | 31.277 | 30.747 |
+| 95,000 | 19.1* | 31.421 | 38.893 | 30.204 | 24.678 | 30.428 | 28.166 | 31.261 | 30.722 |
+| 99,730 | 20.0* | 31.426 | 38.885 | 30.194 | 24.648 | 30.426 | 28.156 | 31.328 | 30.723 |
+
+Best mean at epochs 18-20 (~30.72-30.75); flat from epoch 17 on (every set within +-0.15 dB). haze_noise25 peaked at
+epoch 2 (25.940) and drifted down to ~24.6-24.8; cdd11 rose all the way (27.6 at epoch 2 -> 31.3).
+Single tasks vs the released model (same 10 images), epoch 20: noise s25 -0.02, Rain100L +0.49, SOTS unseen +0.22.
