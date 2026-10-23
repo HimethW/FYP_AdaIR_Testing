@@ -668,3 +668,15 @@ are the user's call ("wait till we are done tomorrow. then i will tell next step
   (`tools/plot_mask_shapes.py`, CPU, 20 min). README.md there has the one-sentence change bullets, key messages and
   Q&A caveats. The baseline column switches to epoch 8 once Elgin's evaluation is in. The baseline's epoch-6 summary is
   kept locally as runs/eval_baseline/epoch6_main.json (per-image values stay on Elgin).
+- 2026-10-24 01:30: frequency analysis at the user's request (how each degradation's frequencies differ, how the
+  learned mask parameters move): `tools/freq_analysis.py`, output /home/minura/Himeth/results/frequency_analysis
+  (README with the full write-up). All test images, luma 256 crops, Hann window, degraded - clean power in dB:
+  - noise adds energy rising with frequency (+5 / +8 / +13 dB at Nyquist), isotropic
+  - haze removes ~3.9 dB uniformly at every frequency
+  - rain adds a small oriented band along the horizontal-frequency axis (vertical streaks)
+  - mixtures add up; CDD-11 has ~2x the haze of our OTS-based set
+  Model side, epoch 20 shape params: the dot tracks the input's spectral spread (rank corr. 0.95). It widens with
+  noise and narrows with haze, and CDD-11 gets the widest dot. The star / lobe shapes only respond to haze (fre1 lobes
+  +7.8% outward, about -1.7 deg; star smaller / flatter), not to noise, and barely to rain. Mixtures add up (haze+rain
+  = haze + rain shifts). All shape shifts are under 9% of the allowed range, consistent with the blocks being lightly
+  used (A18).
