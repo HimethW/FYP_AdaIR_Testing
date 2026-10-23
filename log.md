@@ -652,3 +652,10 @@ Weights kept: iter_0020000 / 0040000 / 0060000 / 0080000.pt (full) and runs/ours
 step_0099730.pt (model + EMA; the final one copied from last.pt by hand). No weights for epochs 1-3, 5-7, 9-11.
 qbits GPU is free (7 MiB). The epoch watcher exited with the run. The baseline on Elgin continues (~Oct 27). Next steps
 are the user's call ("wait till we are done tomorrow. then i will tell next steps").
+- 2026-10-23 10:15-11:50: full test-set evaluations at the user's request ("the standard val to include in the paper"),
+  `eval_fyp.py --sets main` (every image, AdaIR protocol, fp32, EMA): ours epoch 20 and the released checkpoint on
+  qbits (28 / 25 min), the baseline at epoch 6 on Elgin (step_0030000.pt, 50 min; training paused 05:27-06:17 UTC from
+  step 30,025, resumed automatically, nothing lost). Table in results.md A21: ours (epoch 20) beats the baseline (epoch
+  6) on 11 of 13 sets, behind only on haze+noise; both fine-tuned models are below the paper on noise / rain (the
+  baseline more so) and above it on SOTS. Ours at epoch 8 (iter_0040000.pt) is being evaluated on qbits, as the
+  closest saved epoch to the baseline's 6.
