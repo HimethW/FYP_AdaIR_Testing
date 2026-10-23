@@ -659,3 +659,4 @@ are the user's call ("wait till we are done tomorrow. then i will tell next step
   6) on 11 of 13 sets, behind only on haze+noise; both fine-tuned models are below the paper on noise / rain (the
   baseline more so) and above it on SOTS. Ours at epoch 8 (iter_0040000.pt) is being evaluated on qbits, as the
   closest saved epoch to the baseline's 6.
+- 2026-10-23 19:45: user asked for a full test-set evaluation of the baseline at epoch 8 (step 40,000, due ~02:10 IST Oct 24), then the table re-done as released / baseline ep8 / ours ep8 / diff / ours ep20 / diff. Set up on Elgin as a detached script (pause training after step_0040000.pt is saved, evaluate on GPU0, resume).
