@@ -660,3 +660,11 @@ are the user's call ("wait till we are done tomorrow. then i will tell next step
   baseline more so) and above it on SOTS. Ours at epoch 8 (iter_0040000.pt) is being evaluated on qbits, as the
   closest saved epoch to the baseline's 6.
 - 2026-10-23 19:45: user asked for a full test-set evaluation of the baseline at epoch 8 (step 40,000, due ~02:10 IST Oct 24), then the table re-done as released / baseline ep8 / ours ep8 / diff / ours ep20 / diff. Set up on Elgin as a detached script (pause training after step_0040000.pt is saved, evaluate on GPU0, resume).
+- 2026-10-24 00:40: meeting folder /home/minura/Himeth/results/meeting_10_25 (user: 4 slides, only the most important
+  things): 1 the mask bug in the released AdaIR (figures/mask_check_adair3d.png), 2 the full-test-set comparison table
+  (released / baseline ep6 / ours ep8 / diff / ours ep20 / diff; `tools/compare_table.py`, md + csv + png), 3 visual
+  examples released vs ours on the four mixtures (`tools/visual_examples.py`, CPU; one image per set, the one
+  closest to the set's median PSNR gain; outputs reproduce the eval PSNRs exactly), 4 learned mask shapes at epoch 20
+  (`tools/plot_mask_shapes.py`, CPU, 20 min). README.md there has the one-sentence change bullets, key messages and
+  Q&A caveats. The baseline column switches to epoch 8 once Elgin's evaluation is in. The baseline's epoch-6 summary is
+  kept locally as runs/eval_baseline/epoch6_main.json (per-image values stay on Elgin).
