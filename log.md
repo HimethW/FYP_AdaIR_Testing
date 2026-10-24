@@ -680,3 +680,4 @@ are the user's call ("wait till we are done tomorrow. then i will tell next step
   +7.8% outward, about -1.7 deg; star smaller / flatter), not to noise, and barely to rain. Mixtures add up (haze+rain
   = haze + rain shifts). All shape shifts are under 9% of the allowed range, consistent with the blocks being lightly
   used (A18).
+- 2026-10-24 13:30: baseline epoch-8 full evaluation in (Elgin, 50 min; training resumed 22:02 UTC from step 40,012, at step 46,600 by 07:52 UTC, 5.9 img/s, ETA 79 h). results.md A23 + results/meeting_10_25/2_comparison_table now use the baseline at epoch 8 (exactly matched with ours at epoch 8): ours wins 7 of 9; loses noise s50 (-0.10) and haze+noise (-0.15). The epoch-6 table is kept in meeting_10_25/old_baseline_epoch6/.
