@@ -689,3 +689,4 @@ are the user's call ("wait till we are done tomorrow. then i will tell next step
   epoch 8 gets 27.78. The student is far behind on BSD68 / Rain100L / SOTS (never trained on them). Output:
   /home/minura/Himeth/results/teacher_vs_student (`tools/teacher_vs_student.py`); the student's reported numbers are
   kept in runs/eval_student/s70_w16_main.json. W24 can be added after its final evaluation (~19:20 IST).
+- 2026-10-24 23:00: W24 student (S70-CDD11-W24, 16.6M) final evaluation in (friend's rows, step 90,000, not diverged): CDD-11 haze_rain 27.69 / 0.9300 (ours 29.55, +1.86 dB), 11-type CDD-11 mean 27.01 (W16 26.36). Added to results/teacher_vs_student (5 models; W16-only version kept in old_w16_only/).

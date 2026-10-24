@@ -21,13 +21,13 @@ import matplotlib.pyplot as plt  # noqa: E402
 
 SETS = [("haze_rain_cdd11", "Haze + rain\n(CDD-11)"), ("rain100l", "Rain\n(Rain100L)"), ("sots_unseen", "Haze\n(SOTS, 424)"),
         ("bsd68_s15", "Noise σ15\n(BSD68)"), ("bsd68_s25", "Noise σ25\n(BSD68)"), ("bsd68_s50", "Noise σ50\n(BSD68)")]
-COLORS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100"]  # dataviz reference palette slots 1-4 (validated, light mode)
+COLORS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4"]  # dataviz reference palette slots 1-5 (validated, light)
 INK, INK2, MUTED, GRID, AXIS, SURFACE = "#0b0b0b", "#52514e", "#898781", "#e1e0d9", "#c3c2b7", "#fcfcfb"
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--model", action="append", required=True, help="LABEL=path/to/eval.json (2-4 models)")
+    ap.add_argument("--model", action="append", required=True, help="LABEL=path/to/eval.json (2-5 models)")
     ap.add_argument("--label_models", type=int, default=2, help="value labels on the first N models' bars")
     ap.add_argument("--out", required=True)
     ap.add_argument("--note", default="")
@@ -68,10 +68,11 @@ def main():
             ax.bar(pos, vals, width, color=color, edgecolor=SURFACE, linewidth=2, label=label)
             if i < args.label_models:
                 for p, v in zip(pos, vals):
-                    ax.annotate(f"{v:.2f}" if metric == "psnr" else f"{v:.3f}", (p, v), xytext=(0, 2),
-                                textcoords="offset points", ha="center", va="bottom", fontsize=7, color=INK2)
+                    ax.annotate(f"{v:.2f}" if metric == "psnr" else f"{v:.3f}", (p, v), xytext=(0, 3),
+                                textcoords="offset points", ha="center", va="bottom", fontsize=7, color=INK2,
+                                rotation=90)
         ax.set_ylabel(unit, color=INK2)
-        ax.set_ylim(0, (42 if metric == "psnr" else 1.08))
+        ax.set_ylim(0, (44 if metric == "psnr" else 1.12))
     axes[1].set_xticks(x)
     axes[1].set_xticklabels([n for _, n in SETS], fontsize=10, color=INK2)
     axes[0].legend(frameon=False, ncol=len(models), loc="lower left", bbox_to_anchor=(0, 1.02), fontsize=9,
