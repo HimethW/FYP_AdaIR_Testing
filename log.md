@@ -690,3 +690,10 @@ are the user's call ("wait till we are done tomorrow. then i will tell next step
   /home/minura/Himeth/results/teacher_vs_student (`tools/teacher_vs_student.py`); the student's reported numbers are
   kept in runs/eval_student/s70_w16_main.json. W24 can be added after its final evaluation (~19:20 IST).
 - 2026-10-24 23:00: W24 student (S70-CDD11-W24, 16.6M) final evaluation in (friend's rows, step 90,000, not diverged): CDD-11 haze_rain 27.69 / 0.9300 (ours 29.55, +1.86 dB), 11-type CDD-11 mean 27.01 (W16 26.36). Added to results/teacher_vs_student (5 models; W16-only version kept in old_w16_only/).
+- 2026-10-27 01:30: teacher-selection justification for the paper (user: why AdaIR over the newer models with higher
+  PSNR). Researched DATPRL-IR, MIRAGE, BaryIR, MoCE-IR, DSwinIR and VLU-Net (papers, repos, commit dates, issues). Two
+  code claims were checked by reading MoCE-IR's `src/net/moce_ir.py`: routing noise is added in eval mode, and the eval
+  branch is only correct at batch 1. AdaIR measured here: 28.78M params, 162 GMACs at 256x256 (FFT not counted). Write-up
+  with criteria, a per-model rejection table, reasons that do NOT hold, and a draft paper paragraph:
+  /home/minura/Himeth/results/teacher_selection/README.md. Missing: the date we selected the teacher (for the
+  availability argument).
