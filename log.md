@@ -703,3 +703,12 @@ are the user's call ("wait till we are done tomorrow. then i will tell next step
 - 2026-10-27 13:40: baseline step 95,000 (epoch 19) validation in (Elgin log 08:06 UTC, no non-finite steps, ETA 7 h).
   Added to results.md A19: ours - baseline +0.059 / +0.407 / +0.309 / -0.379 / +0.132 / +1.123 / +0.707. Ours wins
   6 of 7; haze+noise -0.379 (ours dipped 24.818 -> 24.678).
+
+### FINISHED (2026-10-27 15:08 UTC / 20:38 IST): baseline_ft on Elgin, 20 epochs
+- Finished 99,730 iterations, with 0 non-finite steps over the whole run. Final weights are
+  /mnt/minura/minura/Himeth/AdaIR/runs/baseline_ft/last.pt. epochs/ holds steps 5,000 to 95,000 (19 files); the final
+  step is being copied to epochs/step_0099730.pt in the same format.
+- Final 10-image validation (results.md A19), ours - baseline at epoch 20: +0.065 / +0.400 / +0.302 / -0.374 / +0.129 /
+  +1.098 / +0.792. Mean of 7: baseline 30.379, ours 30.723 (+0.344). Ours wins 6 of 7 at every matched epoch from 16
+  to 20; haze+noise is the only loss.
+- No full test-set evaluation has been run on the final baseline (waiting for the user's next steps).
