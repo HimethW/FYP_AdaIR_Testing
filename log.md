@@ -727,3 +727,7 @@ are the user's call ("wait till we are done tomorrow. then i will tell next step
   DCPT + fine-tune recipe, data composition, the baseline, evaluation, and the student hand-off), plus the figures and
   tables needed and the open points (method name, attributing the gain across bands / FFT loss / DCPT, which epoch to
   report).
+- 2026-10-28 01:10: methodology outline rewritten at the user's request: the changes are framed as improvements on AdaIR
+  (no bug / fix wording), and every section now explains the idea in plain words before listing what to write. It adds
+  a frequency-background primer, an AdaIR-vs-ours comparison table (3.4), and a block diagram of the new AFLB. Same
+  file: /home/minura/Himeth/results/paper/methodology_teacher_outline.md.
