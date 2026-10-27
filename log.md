@@ -697,3 +697,6 @@ are the user's call ("wait till we are done tomorrow. then i will tell next step
   with criteria, a per-model rejection table, reasons that do NOT hold, and a draft paper paragraph:
   /home/minura/Himeth/results/teacher_selection/README.md. Missing: the date we selected the teacher (for the
   availability argument).
+- 2026-10-27 06:10: baseline step 90,000 (epoch 18) validation in (Elgin log 00:40 UTC, no non-finite steps). Added to
+  results.md A19: ours - baseline +0.039 / +0.409 / +0.386 / -0.264 / +0.134 / +1.087 / +0.763. Ours wins 6 of 7;
+  the haze+noise gap narrowed from -0.513 (epoch 17) to -0.264.
