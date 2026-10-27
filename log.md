@@ -712,3 +712,12 @@ are the user's call ("wait till we are done tomorrow. then i will tell next step
   +1.098 / +0.792. Mean of 7: baseline 30.379, ours 30.723 (+0.344). Ours wins 6 of 7 at every matched epoch from 16
   to 20; haze+noise is the only loss.
 - No full test-set evaluation has been run on the final baseline (waiting for the user's next steps).
+- 2026-10-28 00:10: full test-set evaluation of the final baseline (epoch 20, EMA) at the user's request. Run on Elgin
+  GPU0 (2995 s); summary in runs/eval_baseline/epoch20_main.json. results.md A24 and
+  results/meeting_10_25/2_comparison_table now show released / baseline 8 / ours 8 / Δ / baseline 20 / ours 20 / Δ.
+  `tools/compare_table.py --diff` now takes LABEL:REF, so each Δ is against the baseline at the same epoch. Matched at
+  epoch 20, ours wins 8 of 9 in PSNR and 9 of 9 in SSIM:
+  - noise +0.10 / +0.10 / +0.10, rain +0.04, SOTS +0.22, rain+noise +0.23, haze+rain +0.46, CDD-11 +0.67
+  - the only loss is haze+noise (-0.08 PSNR, but +0.006 SSIM)
+  - averages: single +0.11, mixed +0.32
+  The previous table (ours 20 vs baseline 8) is kept in meeting_10_25/old_ours20_vs_baseline8/.

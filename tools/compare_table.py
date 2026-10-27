@@ -28,8 +28,8 @@ AVERAGES = [("Average, single (5)", ["bsd68_s15", "bsd68_s25", "bsd68_s50", "rai
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--col", action="append", required=True)
-    ap.add_argument("--ref", required=True)
-    ap.add_argument("--diff", nargs="*", default=[])
+    ap.add_argument("--ref", default=None, help="default reference for --diff columns")
+    ap.add_argument("--diff", nargs="*", default=[], help="LABEL, or LABEL:REF to take this column's Δ against REF")
     ap.add_argument("--out", required=True, help="output prefix: writes .md, .csv, .png")
     ap.add_argument("--title", default="Full test sets, PSNR (dB) / SSIM")
     args = ap.parse_args()
@@ -38,21 +38,21 @@ def main():
         label, path = c.split("=", 1)
         cols.append((label, json.load(open(path))["results"]))
     res = dict(cols)
-    ref = res[args.ref]
+    refs = dict((d.split(":", 1) if ":" in d else (d, args.ref)) for d in args.diff)  # column -> its reference
 
     header = ["Degradation"]
     for label, _ in cols:
         header.append(label)
-        if label in args.diff:
-            header.append(f"Δ vs {args.ref.split(',')[0].lower()}")
+        if label in refs:
+            header.append(f"Δ vs {refs[label].split(',')[0].lower()}")
     table, deltas = [], []
     for key, name in ROWS:
         row, drow = [name], [None]
         for label, r in cols:
             row.append(f"{r[key]['psnr']:.2f} / {r[key]['ssim']:.4f}")
             drow.append(None)
-            if label in args.diff:
-                d = r[key]["psnr"] - ref[key]["psnr"]
+            if label in refs:
+                d = r[key]["psnr"] - res[refs[label]][key]["psnr"]
                 row.append(f"{d:+.2f}")
                 drow.append(d)
         table.append(row)
@@ -63,8 +63,8 @@ def main():
             m = sum(r[k]["psnr"] for k in keys) / len(keys)
             row.append(f"{m:.2f}")
             drow.append(None)
-            if label in args.diff:
-                d = m - sum(ref[k]["psnr"] for k in keys) / len(keys)
+            if label in refs:
+                d = m - sum(res[refs[label]][k]["psnr"] for k in keys) / len(keys)
                 row.append(f"{d:+.2f}")
                 drow.append(d)
         table.append(row)

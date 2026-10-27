@@ -730,3 +730,39 @@ At the same epoch (8 vs 8) ours wins 7 of 9 degradations (rain +0.22, SOTS +0.33
 CDD-11 +0.31, noise s15 +0.14, s25 +0.03) and loses noise s50 (-0.10) and haze+noise (-0.15 PSNR, but higher SSIM
 0.843 vs 0.836). From epoch 6 to 8 the baseline lost a little on noise s15 (-0.13) and gained on CDD-11 (+0.71), as the
 10-image validation suggested; the CDD-11 gap narrowed from +1.01 to +0.31.
+
+### A24. Both runs finished, full test sets: baseline epoch 20 vs ours epoch 20 (matched), plus epoch 8 (2026-10-28)
+Baseline = Elgin runs/baseline_ft/epochs/step_0099730.pt (EMA, final), same eval_fyp.py --sets main (log on Elgin:
+runs/eval_baseline/epoch20_main.log, 2995 s; summary kept locally in runs/eval_baseline/epoch20_main.json). Table made
+with `tools/compare_table.py` (each Δ now taken against the baseline at the same epoch: `--diff "Ours, epoch 20:Baseline,
+epoch 20"`); also /home/minura/Himeth/results/meeting_10_25/2_comparison_table.{md,csv,png}.
+
+| Degradation | Released AdaIR (measured) | Baseline, epoch 8 | Ours, epoch 8 | Δ vs baseline | Baseline, epoch 20 | Ours, epoch 20 | Δ vs baseline |
+|---|---|---|---|---|---|---|---|
+| Noise σ15 (BSD68) | 34.12 / 0.9353 | 33.49 / 0.9323 | 33.62 / 0.9344 | +0.14 | 33.65 / 0.9333 | 33.75 / 0.9350 | +0.10 |
+| Noise σ25 (BSD68) | 31.46 / 0.8921 | 31.01 / 0.8883 | 31.04 / 0.8912 | +0.03 | 31.05 / 0.8890 | 31.15 / 0.8917 | +0.10 |
+| Noise σ50 (BSD68) | 28.18 / 0.8019 | 27.77 / 0.7949 | 27.67 / 0.8008 | -0.10 | 27.84 / 0.7976 | 27.95 / 0.8029 | +0.10 |
+| Rain (Rain100L) | 38.64 / 0.9830 | 37.64 / 0.9815 | 37.86 / 0.9823 | +0.22 | 37.83 / 0.9824 | 37.86 / 0.9826 | +0.04 |
+| Haze (SOTS outdoor) | 31.06 / 0.9802 | 30.90 / 0.9795 | 31.22 / 0.9807 | +0.33 | 31.00 / 0.9800 | 31.22 / 0.9809 | +0.22 |
+| Haze + noise σ25 | 15.74 / 0.7173 | 25.14 / 0.8364 | 24.99 / 0.8432 | -0.15 | 25.01 / 0.8382 | 24.93 / 0.8438 | -0.08 |
+| Rain + noise σ25 | 24.51 / 0.7374 | 30.40 / 0.8671 | 30.66 / 0.8725 | +0.26 | 30.52 / 0.8689 | 30.74 / 0.8735 | +0.23 |
+| Haze + rain | 20.46 / 0.8096 | 28.18 / 0.9441 | 28.83 / 0.9528 | +0.65 | 28.55 / 0.9475 | 29.01 / 0.9545 | +0.46 |
+| Haze + rain (CDD-11) | 18.67 / 0.7703 | 27.78 / 0.9479 | 28.09 / 0.9576 | +0.31 | 28.88 / 0.9528 | 29.55 / 0.9615 | +0.67 |
+| Average, single (5) | 32.69 | 32.16 | 32.28 | +0.12 | 32.27 | 32.39 | +0.11 |
+| Average, mixed (4) | 19.84 | 27.88 | 28.14 | +0.27 | 28.24 | 28.56 | +0.32 |
+
+Other sets at epoch 20 (baseline / ours): SOTS unseen 29.995 / 0.9783 vs 30.209 / 0.9793 (+0.21), SOTS seen 36.605 vs
+36.861 (+0.26), haze+noise unseen 24.541 / 0.8339 vs 24.444 / 0.8397 (-0.10), haze+rain unseen 27.946 vs 28.367 (+0.42).
+- **At the same final epoch (20 vs 20) ours wins 8 of 9 degradations in PSNR and all 9 in SSIM:**
+  - noise σ15 / σ25 / σ50: +0.10 / +0.10 / +0.10
+  - rain: +0.04
+  - SOTS: +0.22
+  - rain+noise: +0.23
+  - haze+rain: +0.46
+  - CDD-11: +0.67
+- **The only PSNR loss is haze+noise (-0.08)**, and there ours has the higher SSIM (0.8438 vs 0.8382).
+- **Averages:** single +0.11 dB, mixed +0.32 dB.
+- **Epoch 8 to 20:**
+  - The baseline caught up on rain (37.64 → 37.83), so our rain lead shrank from +0.22 to +0.04.
+  - It gained most on CDD-11 (+1.09), but ours gained more (+1.46).
+  - Ours' noise σ50 deficit at epoch 8 (-0.10) became a lead (+0.10).
