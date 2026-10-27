@@ -706,8 +706,8 @@ are the user's call ("wait till we are done tomorrow. then i will tell next step
 
 ### FINISHED (2026-10-27 15:08 UTC / 20:38 IST): baseline_ft on Elgin, 20 epochs
 - Finished 99,730 iterations, with 0 non-finite steps over the whole run. Final weights are
-  /mnt/minura/minura/Himeth/AdaIR/runs/baseline_ft/last.pt. epochs/ holds steps 5,000 to 95,000 (19 files); the final
-  step is being copied to epochs/step_0099730.pt in the same format.
+  /mnt/minura/minura/Himeth/AdaIR/runs/baseline_ft/last.pt. epochs/ holds all 20 epochs: steps 5,000 to 95,000, plus
+  step_0099730.pt (231 MB, copied from last.pt in the keep_epochs format, CPU; last.pt untouched).
 - Final 10-image validation (results.md A19), ours - baseline at epoch 20: +0.065 / +0.400 / +0.302 / -0.374 / +0.129 /
   +1.098 / +0.792. Mean of 7: baseline 30.379, ours 30.723 (+0.344). Ours wins 6 of 7 at every matched epoch from 16
   to 20; haze+noise is the only loss.
