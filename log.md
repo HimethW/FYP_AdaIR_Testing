@@ -721,3 +721,9 @@ are the user's call ("wait till we are done tomorrow. then i will tell next step
   - the only loss is haze+noise (-0.08 PSNR, but +0.006 SSIM)
   - averages: single +0.11, mixed +0.32
   The previous table (ours 20 vs baseline 8) is kept in meeting_10_25/old_ours20_vs_baseline8/.
+- 2026-10-28 00:40: paper methodology (teacher part) outline at the user's request, written from the code and run
+  configs: /home/minura/Himeth/results/paper/methodology_teacher_outline.md. It covers sections 3.0-3.12 (the AdaIR
+  recap, the mask-collapse finding, shaped bands, SGB with its bounds table, per-band CA + BSA, the loss, the two-stage
+  DCPT + fine-tune recipe, data composition, the baseline, evaluation, and the student hand-off), plus the figures and
+  tables needed and the open points (method name, attributing the gain across bands / FFT loss / DCPT, which epoch to
+  report).
