@@ -171,3 +171,6 @@ logs/
 lightning_logs/
 wandb/
 runs/
+
+# Paper drafts (kept on qbits only, not pushed)
+paper/
