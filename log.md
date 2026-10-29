@@ -731,3 +731,8 @@ are the user's call ("wait till we are done tomorrow. then i will tell next step
   (no bug / fix wording), and every section now explains the idea in plain words before listing what to write. It adds
   a frequency-background primer, an AdaIR-vs-ours comparison table (3.4), and a block diagram of the new AFLB. Same
   file: /home/minura/Himeth/results/paper/methodology_teacher_outline.md.
+- 2026-10-29 20:30: paper reference draft at the user's request: paper/method_claude.tex (git-ignored, stays on
+  qbits). It is the team's Method section with a full "Frequency-adaptive teacher" subsection added before "Training
+  with dynamic teachers", plus Experiments text (baseline, protocol) and supplementary tables (shape bounds, data,
+  training settings). Teacher size measured on CPU: 31.13M params and 173 GMACs at 256x256 (AdaIR 28.78M, 162 GMACs,
+  FFT not counted). No LaTeX on qbits, so only a static check was run (braces, environments, refs, $ balance).
