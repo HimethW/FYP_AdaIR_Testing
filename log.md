@@ -736,3 +736,4 @@ are the user's call ("wait till we are done tomorrow. then i will tell next step
   with dynamic teachers", plus Experiments text (baseline, protocol) and supplementary tables (shape bounds, data,
   training settings). Teacher size measured on CPU: 31.13M params and 173 GMACs at 256x256 (AdaIR 28.78M, 162 GMACs,
   FFT not counted). No LaTeX on qbits, so only a static check was run (braces, environments, refs, $ balance).
+- 2026-10-29 21:00: paper/method_claude.tex refined at the user's request: methodology only (Experiments text and supplementary tables removed). Shape ranges, stage settings and the data composition are folded into the text. Static LaTeX check clean. Previous version kept in the scratchpad.
