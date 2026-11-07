@@ -784,3 +784,22 @@ First fine-tune attempt, after epoch 1 (214 steps). PSNR, 10 held-out images per
   17.74 dB) mostly measured the starting point, not the training.
 - The run was restarted with the EMA warm-up (decay min(0.999, (1+t)/(10+t))). The per-epoch table comes from the
   restarted run (runs/cdd6_ft/test/table.md).
+
+### A26. CDD-11: why the haze classes lag (scale check, 2026-11-08)
+
+Epoch-6 EMA weights, CPU fp32, OneRestore protocol, 4 test images per class (indices 0 / 66 / 133 / 199).
+PSNR (dB). "Tiled" = the whole image restored in 256-px tiles with 64 px overlap, blended.
+
+| Class | Whole image (= test) | Tiled 256 | Δ | Centre 256, whole image in | Centre 256, only it in | Δ |
+|---|---|---|---|---|---|---|
+| haze | 27.55 | 29.70 | **+2.15** | 27.66 | 34.06 | +6.40 |
+| haze+rain | 23.81 | 25.69 | **+1.88** | 24.33 | 26.07 | +1.74 |
+| low+haze | 21.04 | 24.45 | **+3.41** | 21.65 | 25.39 | +3.74 |
+| rain | 33.73 | 32.93 | **-0.80** | 33.91 | 33.12 | -0.79 |
+
+- The centre region is not easier than the rest (whole-image score vs centre-region score are close), so the gain
+  comes from the model seeing a smaller input, not from an easier region.
+- Haze classes: much better on 256-px inputs (the model was trained on 128-px crops). Removing one global colour /
+  brightness offset per image recovers +0.7 to +2.0 dB, so part of the full-image error is a wrong overall level.
+- Rain: slightly better on the whole image.
+- Only 4 images per class, and low / low+rain were not checked: a direction, not a number for the paper.

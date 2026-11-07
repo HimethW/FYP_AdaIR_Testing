@@ -810,3 +810,17 @@ OneRestore, equal images per class. First on Elgin, then (user) "dont use elgin 
   32.3 vs 29.2, haze+rain 28.2 vs 25.1, while low / rain / low+haze / low+rain are within ~1 dB. Not the same images,
   so only a hint: haze may be removed well on small regions but not across the whole 1080 x 720 image (we train on
   128-px crops).
+- 2026-11-08 00:10: user's target for this model: **at least 28 dB** 6-class mean (EvoIR 29.17, OneRestore 28.96).
+  Epoch 7: 26.07, epoch 8: 26.21. Biggest gaps to EvoIR at epoch 7: haze+rain -5.39, haze -4.56, low+haze -4.18
+  (76% of the gap together); low+rain -1.84, rain -1.44, low -1.22.
+- 2026-11-08 00:43: **scale check** (tools/cdd_scale_check.py, CPU fp32, epoch-6 EMA, 4 test images per class,
+  indices 0 / 66 / 133 / 199 of each class; full image = 31.91 on the first image, the same as the logged test).
+  Whole image in vs the same image restored in 256-px tiles (64 px overlap, blended): haze 27.55 -> 29.70 (+2.15),
+  haze+rain 23.81 -> 25.69 (+1.88), low+haze 21.04 -> 24.45 (+3.41), **rain 33.73 -> 32.93 (-0.80)**. Centre 256 px,
+  whole image in vs only that region in: haze 27.66 -> 34.06, haze+rain 24.33 -> 26.07, low+haze 21.65 -> 25.39,
+  rain 33.91 -> 33.12. Removing one global colour / brightness offset per image: haze +0.73, haze+rain +1.73,
+  low+haze +1.99, rain +1.11.
+  Reading: trained on 128-px crops, the model removes haze well at that scale but not across a whole 1080 x 720
+  image (part of the error is a wrong overall level for the whole image); rain removal prefers the whole image.
+  This is the known train-on-crops / test-on-full-images mismatch of models with global operations (Restormer's
+  channel attention over all pixels); TLC (Chu et al., ECCV 2022) is the published test-time fix.
