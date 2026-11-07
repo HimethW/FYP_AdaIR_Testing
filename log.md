@@ -787,3 +787,18 @@ OneRestore, equal images per class. First on Elgin, then (user) "dont use elgin 
 - Every epoch's weights (model + EMA) kept in runs/cdd6_ft/epochs/.
 - Launch: `setsid nohup bash scripts/run_cdd6.sh >> runs/cdd6.out 2>&1 &` (re-running resumes).
 - 2026-11-07 17:38: DCPT at step 100: 7.2 img/s (as the main run's DCPT), accuracy 0.47, ETA 2.3 h -> fine-tune from ~20:00, all 20 epochs + tests ~05:30 Nov 8 (estimate: 9 min training + 3 min search + 16 min test per epoch).
+- 2026-11-07 20:00: DCPT finished (2,000 iterations). Held-out degradation accuracy 0.85 (low 1.00, haze 0.80,
+  rain 1.00, haze+rain 0.70, low+haze 0.80, low+rain 0.80; 10 images per class).
+- 2026-11-07 20:25: **first fine-tune attempt stopped after epoch 1.** Two problems:
+  1. Writing test/table.md crashed: the detached shell's locale was ASCII and the table header has "Δ"
+     (UnicodeEncodeError). Fixed: table.md / train.log written as UTF-8, and `export PYTHONUTF8=1` in the launcher.
+  2. Epoch-1 test scores were very low (mean 17.74 dB): the tested EMA weights were still mostly the starting
+     weights. EMA 0.999 after 214 steps keeps 0.999^214 = 81% of the start, and the whole run is only 4,280 steps
+     (the main run had ~100,000, where 0.999 is fine). Check on 10 held-out images per class (OneRestore protocol,
+     TF32): DCPT start 16.63 dB, EMA at step 214 17.93, raw weights at step 214 **23.37**.
+  Fix: `--ema_warmup`, EMA decay min(0.999, (1+t)/(10+t)) at step t (the usual warm-up for short runs: follows the
+  weights early on, then averages over about the last t/9 steps; 0.958 at step 214, 0.991 at step 1,000, 0.998 at
+  the end). Toy check: after 214 steps toward a constant target, warm-up EMA 1.000, plain 0.999 EMA 0.193.
+  The first attempt is kept as runs/cdd6_ft_ema999 (epoch-1 weights + test JSON).
+- 2026-11-07 20:43: fine-tune restarted from runs/cdd6_dcpt/last.pt with `--ema_warmup` (everything else the same).
+  New estimate: epoch 1 test ~21:10, then every ~28 min, all 20 epochs ~06:00 Nov 8.

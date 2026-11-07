@@ -766,3 +766,21 @@ Other sets at epoch 20 (baseline / ours): SOTS unseen 29.995 / 0.9783 vs 30.209 
   - The baseline caught up on rain (37.64 → 37.83), so our rain lead shrank from +0.22 to +0.04.
   - It gained most on CDD-11 (+1.09), but ours gained more (+1.46).
   - Ours' noise σ50 deficit at epoch 8 (-0.10) became a lead (+0.10).
+
+### A25. CDD-11 run (6 classes): DCPT and the first epoch (2026-11-07)
+
+DCPT (runs/cdd6_dcpt, 2,000 iterations, backbone = released AdaIR 5-task, frozen): held-out degradation accuracy
+**0.85** (low 1.00, haze 0.80, rain 1.00, haze+rain 0.70, low+haze 0.80, low+rain 0.80; 10 images per class).
+
+First fine-tune attempt, after epoch 1 (214 steps). PSNR, 10 held-out images per class, OneRestore protocol, TF32:
+
+| Weights | low | haze | rain | haze+rain | low+haze | low+rain | mean |
+|---|---|---|---|---|---|---|---|
+| DCPT start | 12.39 | 16.43 | 23.69 | 16.03 | 15.26 | 15.98 | 16.63 |
+| EMA 0.999, step 214 | 12.62 | 19.27 | 25.23 | 18.67 | 15.25 | 16.56 | 17.93 |
+| Raw weights, step 214 | 24.47 | 27.06 | 30.29 | 22.62 | 15.81 | 19.96 | **23.37** |
+
+- The EMA at decay 0.999 is still 81% the starting weights after 214 steps. Its full-test score after epoch 1 (mean
+  17.74 dB) mostly measured the starting point, not the training.
+- The run was restarted with the EMA warm-up (decay min(0.999, (1+t)/(10+t))). The per-epoch table comes from the
+  restarted run (runs/cdd6_ft/test/table.md).

@@ -24,7 +24,7 @@ weights at the end of every epoch in <run>/epochs/epoch_XX.pt):
   python train_fyp.py --name cdd6_dcpt --stage dcpt --tasks cdd6 --iters 2000 --batch 2 --accum 16 \
       --init ckpt/adair3d.ckpt --init_backbone --freeze_backbone -1
   python train_fyp.py --name cdd6_ft --tasks cdd6 --epochs 20 --init runs/cdd6_dcpt/last.pt --lr 1e-4 \
-      --warmup 0.02 --ema 0.999 --loss mix --mix_search
+      --warmup 0.02 --ema 0.999 --ema_warmup --loss mix --mix_search
 
 Loss-mix search (--loss mix --mix_search), after EvoIR's evolutionary loss weighting (arXiv 2512.05104):
 the loss is a * L1 + (1 - a) * (1 - MS-SSIM) + 0.1 * FFT-L1 (patches/losses.py MixLoss). At the start of every
@@ -115,6 +115,8 @@ def get_args():
                    help="let cuDNN time its conv algorithms and keep the fastest (same fp32 precision, not bitwise "
                         "reproducible); default off")
     p.add_argument("--ema", type=float, default=0.0, help="EMA decay, 0 = off (DCPT's configs use 0.999)")
+    p.add_argument("--ema_warmup", action="store_true",
+                   help="EMA decay min(ema, (1+t)/(10+t)) at step t (short runs: see the EMA class)")
     p.add_argument("--clip", type=float, default=0.0, help="grad-norm clip, 0 = off")
     p.add_argument("--on_nonfinite", choices=("stop", "skip"), default="stop",
                    help="a NaN / inf gradient: stop (save the last good weights) or skip that update (stops after 20 "
@@ -147,7 +149,7 @@ def get_args():
 
 class Logger:
     def __init__(self, path):
-        self.f = open(path, "a")
+        self.f = open(path, "a", encoding="utf-8")
 
     def __call__(self, msg):
         line = f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {msg}"
@@ -157,15 +159,19 @@ class Logger:
 
 
 class EMA:
-    def __init__(self, model, decay):
-        self.decay = decay
+    """warmup: the decay at update t (t = updates before this one) is min(decay, (1 + t) / (10 + t)), so the
+    average follows the weights closely early on and averages over roughly the last t / 9 updates (for short
+    runs, where a fixed 0.999 would still be mostly the starting weights after the first few hundred steps)."""
+    def __init__(self, model, decay, warmup=False):
+        self.decay, self.warmup = decay, warmup
         self.state = {k: v.detach().clone().float() for k, v in model.state_dict().items()}
 
     @torch.no_grad()
-    def update(self, model):
+    def update(self, model, t=None):
+        d = min(self.decay, (1 + t) / (10 + t)) if self.warmup and t is not None else self.decay
         for k, v in model.state_dict().items():
             if v.dtype.is_floating_point:
-                self.state[k].mul_(self.decay).add_(v.float(), alpha=1 - self.decay)
+                self.state[k].mul_(d).add_(v.float(), alpha=1 - d)
             else:
                 self.state[k].copy_(v)
 
@@ -333,7 +339,7 @@ def main():
         if dcpt is not None:
             n += sum(p.numel() for p in dcpt.classifier.parameters())
         log(f"backbone {'frozen' if frozen else 'trainable'}: {n / 1e6:.2f}M trainable params")
-    ema = EMA(model, args.ema) if args.ema > 0 and main_proc else None
+    ema = EMA(model, args.ema, args.ema_warmup) if args.ema > 0 and main_proc else None
 
     log(f"train set: {len(data)} samples / epoch from {counts}; {args.iters} iters x {per_step} "
         f"= {args.iters * per_step / len(data):.2f} epochs ({steps_per_epoch} steps / epoch)"
@@ -467,7 +473,7 @@ def main():
         for s in schedulers:
             s.step()
         if ema is not None:
-            ema.update(model)
+            ema.update(model, step)
         return True
 
     def mix_search():
@@ -582,7 +588,7 @@ def main():
             for s in schedulers:
                 s.step()
             if ema is not None:
-                ema.update(model)
+                ema.update(model, step)
             step += 1
             state["updating"] = False
             if world > 1:  # a stop signal on any GPU stops all of them at this same step
@@ -663,7 +669,7 @@ def main():
                                    **{f"test/{k}_psnr": v["psnr"] for k, v in res.items()}})
                     if cdd:
                         from tools.cdd_table import table
-                        with open(os.path.join(run, "test", "table.md"), "w") as f:
+                        with open(os.path.join(run, "test", "table.md"), "w", encoding="utf-8") as f:
                             f.write(table(run))
                     log(f"test after epoch {ep}: mean PSNR {mean_psnr:.3f} SSIM {mean_ssim:.4f} "
                         f"({time.time() - t_test:.0f}s)")

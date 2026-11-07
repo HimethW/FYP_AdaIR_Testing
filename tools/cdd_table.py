@@ -71,7 +71,7 @@ def main():
     args = ap.parse_args()
     out = args.out or os.path.join(args.run, "test", "table.md")
     text = table(args.run)
-    with open(out, "w") as f:
+    with open(out, "w", encoding="utf-8") as f:
         f.write(text)
     print(text)
 
