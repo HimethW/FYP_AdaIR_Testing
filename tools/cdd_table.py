@@ -57,7 +57,9 @@ def table(run):
         lines.append(f"| ours, epoch {ep} | {cells}"
                      + f" | **{m[0]:.2f} / {m[1]:.4f}** | {d['EvoIR'][0]:+.2f} / {d['EvoIR'][1]:+.4f}"
                      + f" | {d['OneRestore'][0]:+.2f} / {d['OneRestore'][1]:+.4f} |")
-    note = (f"\nPSNR / SSIM, CDD-11 test (200 images per class, full resolution, OneRestore protocol). "
+    tiles = {json.load(open(f)).get("tile") or 0 for f in files}
+    tiles = (f" Ours restored in {max(tiles)}-px tiles ({max(tiles) // 4}-px overlap) and scored on the whole image.") if max(tiles, default=0) else ""
+    note = (f"\nPSNR / SSIM, CDD-11 test (200 images per class, full resolution, OneRestore protocol).{tiles} "
             f"Ours: EMA weights; per-epoch evaluation runs with TF32 inference (mean difference to true fp32 "
             f"-0.0004 dB on a 12-image check). Published methods train on all 11 classes."
             + (f" Best epoch so far by mean PSNR: {best[0]}." if best else ""))

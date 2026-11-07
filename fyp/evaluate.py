@@ -169,6 +169,40 @@ def run_model(model, x, mult=16, max_pixels=2_600_000, tile=1024, overlap=64):
     return out / weight
 
 
+class Tiled(torch.nn.Module):
+    """Runs `net` on tile x tile pieces of the image (tile // 4 overlap, the same placement and blending weights as
+    run_model's tiling), `batch` pieces per forward. The model is trained on small crops and removes haze better on
+    pieces of about that size than on a whole 1080 x 720 image (results.md A26 / A27)."""
+
+    def __init__(self, net, tile=256, batch=8):
+        super().__init__()
+        self.net, self.tile, self.batch = net, tile, batch
+
+    @torch.no_grad()
+    def forward(self, x):
+        t, ov = self.tile, self.tile // 4
+        h, w = x.shape[-2:]
+        if h < t or w < t:  # smaller than one tile: the old one-by-one path
+            return run_model(self.net, x, max_pixels=1, tile=t, overlap=ov)
+        step = t - ov
+        ys = list(range(0, h - t + 1, step)) + ([h - t] if (h - t) % step else [])
+        xs = list(range(0, w - t + 1, step)) + ([w - t] if (w - t) % step else [])
+        ramp = torch.minimum(torch.arange(t, device=x.device) + 1, torch.arange(t, 0, -1, device=x.device))
+        ramp = ramp.clamp(max=ov).float()
+        wgt = (ramp[:, None] * ramp[None, :])[None, None]
+        out = torch.zeros_like(x)
+        weight = torch.zeros_like(x[:, :1])
+        pos = [(y, x0) for y in ys for x0 in xs]
+        for i in range(0, len(pos), self.batch):
+            chunk = pos[i:i + self.batch]
+            pred = run_model(self.net, torch.cat([x[..., y:y + t, x0:x0 + t] for y, x0 in chunk], 0),
+                             max_pixels=t * t + 1)
+            for (y, x0), p in zip(chunk, pred.split(1, 0)):
+                out[..., y:y + t, x0:x0 + t] += p * wgt
+                weight[..., y:y + t, x0:x0 + t] += wgt
+        return out / weight
+
+
 @torch.no_grad()
 def evaluate(model, sets, names, device="cuda", protocol="adair", limit=None, save_dir=None, log=print, workers=0):
     """Returns {set: {"psnr", "ssim", "n", "per_image": {name: [psnr, ssim]}}}.

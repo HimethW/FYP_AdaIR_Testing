@@ -824,3 +824,24 @@ OneRestore, equal images per class. First on Elgin, then (user) "dont use elgin 
   image (part of the error is a wrong overall level for the whole image); rain removal prefers the whole image.
   This is the known train-on-crops / test-on-full-images mismatch of models with global operations (Restormer's
   channel attention over all pixels); TLC (Chu et al., ECCV 2022) is the published test-time fix.
+- 2026-11-08 01:35: **test-time inference check** (user: "do your suggestion"). New fyp/local_infer.py: TLC-style
+  local aggregation (Chu et al., ECCV 2022): channel attention (and optionally the whole frequency block) computed
+  on overlapping windows of `base` px (base/2, /4, /8 at lower levels), outputs averaged; convolutions still see the
+  whole image. Checks: window >= image gives exactly the original output (max diff 0); two windows = attention on
+  each half (diff 0); model restored after use. Paused cdd6_ft with SIGTERM at step 2246 (epoch 11 of 20, last.pt
+  saved) to free the GPU. Epoch 9 26.280, epoch 10 26.316 (whole image).
+- 2026-11-08 01:59: sweep on **held-out training scenes** (20 per class, never the test; tools/cdd_infer_sweep.py,
+  epoch-10 EMA, TF32): whole image 26.69; tiles 256 / 384 / 512 (1/4 overlap): **27.84** / 27.79 / 27.55; local
+  attention 192 / 256 / 384: 26.85 / 27.20 / 27.42; local + frequency blocks 256 / 384: 27.20 / 27.42 (= attention
+  only: the frequency blocks' whole-image statistics do not matter). Chosen by the rule fixed beforehand (best
+  held-out mean): 256-px tiles.
+- 2026-11-08 02:27: 256-px tiles once on the **full CDD-11 test** (epoch 10): **27.10 / 0.8838** vs whole image
+  26.32 / 0.8744 (+0.79): low 25.83 (-0.01), haze 29.61 (+1.68), rain 32.12 (-0.78), haze+rain 27.05 (+2.15),
+  low+haze 23.62 (+1.61), low+rain 24.38 (+0.06). Still 0.9 below the 28 dB target -> step 3 as agreed.
+  fyp/evaluate.py `Tiled` (batched tiles; same placement / blending as run_model's tiling, max diff 4e-7);
+  train_fyp.py `--test_tile N` (per-epoch test in N-px tiles); cdd_table notes the tiles.
+- 2026-11-08 02:27: **step 3, runs/cdd6_ft256** (scripts/run_cdd6_256.sh): continue from cdd6_ft/last.pt (step
+  2246, raw weights) on **256-px crops** (batch 1 x 32, same 32 crops per step), 5 epochs (1,070 steps), lr 5e-5
+  (where the 128-px cosine was) -> 1e-6, warm-up 2%, EMA 0.999 with warm-up, loss mix from a = 0.9058 with the
+  look-ahead search, per-epoch test in 256-px tiles. Memory 13.3 GB. cdd6_ft stays paused (resumable).
+  Estimate: ~36 min training + ~10 min search + ~20 min test per epoch, epoch 1 ~03:25, epoch 5 ~08:00.

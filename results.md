@@ -803,3 +803,33 @@ PSNR (dB). "Tiled" = the whole image restored in 256-px tiles with 64 px overlap
   brightness offset per image recovers +0.7 to +2.0 dB, so part of the full-image error is a wrong overall level.
 - Rain: slightly better on the whole image.
 - Only 4 images per class, and low / low+rain were not checked: a direction, not a number for the paper.
+
+### A27. CDD-11: running the model on smaller pieces of the image (epoch 10, 2026-11-08)
+
+Same weights (epoch-10 EMA of runs/cdd6_ft), only how the model is run changes. Chosen on 20 held-out TRAINING scenes
+per class (never the test set), then the chosen setting run once on the test. PSNR, OneRestore protocol, TF32.
+
+| Setting (held-out scenes) | low | haze | rain | haze+rain | low+haze | low+rain | mean |
+|---|---|---|---|---|---|---|---|
+| Whole image | 26.23 | 30.24 | 33.35 | 26.04 | 20.97 | 23.31 | 26.69 |
+| **Tiles 256** | 26.23 | 33.29 | 32.98 | 28.23 | 22.85 | 23.44 | **27.84** |
+| Tiles 384 | 26.25 | 33.58 | 33.29 | 27.90 | 22.29 | 23.43 | 27.79 |
+| Tiles 512 | 26.25 | 32.88 | 33.31 | 27.58 | 21.83 | 23.43 | 27.55 |
+| Local attention 192 | 26.26 | 30.26 | 32.77 | 27.34 | 21.07 | 23.40 | 26.85 |
+| Local attention 256 | 26.26 | 31.35 | 33.16 | 27.69 | 21.37 | 23.38 | 27.20 |
+| Local attention 384 | 26.25 | 31.96 | 33.39 | 27.91 | 21.61 | 23.36 | 27.42 |
+| Local attention + frequency blocks 384 | 26.25 | 31.96 | 33.39 | 27.91 | 21.62 | 23.36 | 27.42 |
+
+Full CDD-11 test (200 per class), epoch 10:
+
+| | low | haze | rain | haze+rain | low+haze | low+rain | mean (PSNR / SSIM) |
+|---|---|---|---|---|---|---|---|
+| Whole image | 25.84 | 27.93 | 32.90 | 24.90 | 22.01 | 24.32 | 26.32 / 0.8744 |
+| Tiles 256 | 25.83 | 29.61 | 32.12 | 27.05 | 23.62 | 24.38 | **27.10 / 0.8838** |
+| EvoIR (published) | 27.06 | 32.24 | 34.03 | 29.76 | 25.92 | 26.02 | 29.17 / 0.898 |
+
+- Tiles help every haze class (+1.6 to +2.2 dB on the test) and cost rain 0.8 dB; low-light classes are unchanged.
+- Plain tiles beat local attention (TLC-style): the convolutions seeing the whole image is not what helps.
+- Making the frequency blocks local changes nothing: the whole-image effect comes from the channel attention.
+- The gain on the test (+0.79) is smaller than on the held-out scenes (+1.15). Still 0.9 dB below the 28 dB target,
+  so training continues on 256-px crops (runs/cdd6_ft256).

@@ -63,7 +63,7 @@ from torch.utils.data.distributed import DistributedSampler
 from torch.utils.tensorboard import SummaryWriter
 
 from fyp.data import CDD_CLASSES, LABELS, TrainSet, class_names, is_cdd, parse_tasks, worker_init
-from fyp.evaluate import evaluate, load_sample, resolve, test_sets
+from fyp.evaluate import Tiled, evaluate, load_sample, resolve, test_sets
 from fyp.models import VARIANTS, build_model, is_backbone, load_weights
 from patches.dcpt import DCPT
 from patches.losses import MixLoss, PixelFFTLoss
@@ -136,6 +136,8 @@ def get_args():
                    help="with --epochs: evaluate the EMA weights on these full test sets after every epoch, written "
                         "to <run>/test/epoch_XX.json (+ the CDD-11 comparison table for cdd6)")
     p.add_argument("--test_protocol", default="onerestore", choices=("adair", "full", "onerestore"))
+    p.add_argument("--test_tile", type=int, default=0,
+                   help="per-epoch test on tile x tile pieces of each image (fyp.evaluate.Tiled); 0 = whole image")
     p.add_argument("--test_tf32", action="store_true",
                    help="TF32 inference for the per-epoch test (1.5x faster; -0.0004 dB mean vs fp32 on a check)")
     p.add_argument("--test_workers", type=int, default=8, help="CPU threads for loading and metrics")
@@ -650,9 +652,11 @@ def main():
                     t_test = time.time()
                     test_net = build_model(args.variant).to(device)
                     test_net.load_state_dict(ema.state if ema is not None else model.state_dict())
+                    if args.test_tile:
+                        test_net = Tiled(test_net, args.test_tile)
                     torch.backends.cudnn.allow_tf32 = torch.backends.cuda.matmul.allow_tf32 = args.test_tf32
                     log(f"test after epoch {ep} ({'ema' if ema else 'model'}, {args.test_protocol}"
-                        f"{', tf32' if args.test_tf32 else ''}):")
+                        f"{', tf32' if args.test_tf32 else ''}{f', {args.test_tile}-px tiles' if args.test_tile else ''}):")
                     res = evaluate(test_net, sets, resolve(args.test_sets, sets), device=device,
                                    protocol=args.test_protocol, log=log, workers=args.test_workers,
                                    limit=args.test_limit)
@@ -662,7 +666,7 @@ def main():
                     os.makedirs(os.path.join(run, "test"), exist_ok=True)
                     with open(os.path.join(run, "test", f"epoch_{ep:02d}.json"), "w") as f:
                         json.dump({"epoch": ep, "step": step, "ema": ema is not None, "protocol": args.test_protocol,
-                                   "tf32": args.test_tf32, "mix_a": getattr(loss_fn, "a", None), "results": res}, f)
+                                   "tf32": args.test_tf32, "tile": args.test_tile, "mix_a": getattr(loss_fn, "a", None), "results": res}, f)
                     mean_psnr = float(np.mean([v["psnr"] for v in res.values()]))
                     mean_ssim = float(np.mean([v["ssim"] for v in res.values()]))
                     write_metrics({"test/mean_psnr": mean_psnr, "test/mean_ssim": mean_ssim,
