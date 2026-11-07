@@ -850,3 +850,7 @@ OneRestore, equal images per class. First on Elgin, then (user) "dont use elgin 
   low+rain 24.51. Speed 3.2 img/s (10 s per step, 36 min per epoch); the tiled test takes 29 min (batching the
   tiles did not shorten it: twice the pixels of the whole image with the 1/4 overlap). Revised finish: epoch 2
   ~04:50, 3 ~06:05, 4 ~07:25, 5 ~08:40.
+- 2026-11-08 03:53: user: make it the full 20 epochs. Stage 2 (cdd6_ft256) paused at step 287 (SIGTERM, saved) and
+  resumed with `--epochs 10` (2,140 steps; 10.5 at 128 px + 10 at 256 px = 20.5 epochs). The cosine is recomputed
+  for the longer run: lr at step 288 4.84e-5 instead of 4.26e-5. Search state (a = 1.0, last search at step 214)
+  restored. Expected: epoch 2 ~04:50, then every ~77 min (36 training + 11 search + 29 tiled test), epoch 10 ~15:00.
