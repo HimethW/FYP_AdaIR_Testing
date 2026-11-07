@@ -14,13 +14,14 @@ Layout produced (AdaIR defaults, options.py / test.py):
   data/test/dehaze/{input,target}/            SOTS outdoor (500 hazy, 492 gt as <id>.png)
   data/test/dehaze_ohaze/{input,target}/      O-HAZE, 45 pairs (usual test split 41-45)
   data/test/dehaze_nhhaze/{input,target}/     NH-HAZE, 55 pairs (usual test split 51-55)
-  data/CDD-11/{train,test}/{clear,haze_rain}/ CDD-11 haze+rain subset only (1,183 train / 200 test pairs)
+  data/CDD-11/{train,test}/{clear,low,haze,rain,haze_rain,low_haze,low_rain}/
+                                             CDD-11 subset: 6 degradation classes + clear (1,183 train / 200 test each)
 
 Sources (checked 2026-10-19; see log.md): Google Drive IDs from AdaIR's INSTALL.md (Hugging Face
 mirror laoduanaaa/Image_Restoration_Datasets as fallback for BSD400 / WED), RESIDE on Box (official),
 CBSD68 on GitHub, Kodak24 from r0k.us, O-HAZE / NH-HAZE from ETH, CDD-11 from its official Hugging Face
 repo gy65896/CDD-11
-(only the haze_rain + clear folders are read, over HTTP Range, instead of the 26 GB zips).
+(only the folders in CDD_DIRS are read, over HTTP Range, instead of the 26 GB zips).
 
 Usage: python tools/prepare_data.py [--steps bsd400 wed ...] [--root data]
 """
@@ -306,16 +307,18 @@ def step_nhhaze(root):
 
 
 CDD_WANT = {"train": 1183, "test": 200}
+# the 6 classes of our CDD-11 run (no snow, no triple mixtures) + their shared clean images
+CDD_DIRS = ("clear", "low", "haze", "rain", "haze_rain", "low_haze", "low_rain")
 
 
 def step_cdd11(root):
     for split, n in CDD_WANT.items():
-        if all(count(f"{root}/CDD-11/{split}/{d}") == n for d in ("clear", "haze_rain")):
+        if all(count(f"{root}/CDD-11/{split}/{d}") == n for d in CDD_DIRS):
             log(f"cdd11 {split}: done")
             continue
         rf = RangeFile(CDD.format(split=split))
         z = zipfile.ZipFile(io.BufferedReader(rf, buffer_size=4 << 20))
-        members = [i for i in z.infolist() if not i.is_dir() and i.filename.split("/")[-2] in ("clear", "haze_rain")]
+        members = [i for i in z.infolist() if not i.is_dir() and i.filename.split("/")[-2] in CDD_DIRS]
         log(f"cdd11 {split}: reading {len(members)} files from a {rf.size / 1e9:.1f} GB zip")
         for k, info in enumerate(members):
             sub = info.filename.split("/")[-2]
@@ -328,8 +331,7 @@ def step_cdd11(root):
             os.replace(out + ".part", out)
             if k % 200 == 0:
                 log(f"cdd11 {split}: {k}/{len(members)}")
-        log(f"cdd11 {split}: clear {count(f'{root}/CDD-11/{split}/clear')}, "
-            f"haze_rain {count(f'{root}/CDD-11/{split}/haze_rain')}")
+        log(f"cdd11 {split}: " + ", ".join(f"{d} {count(f'{root}/CDD-11/{split}/{d}')}" for d in CDD_DIRS))
 
 
 STEPS = {"bsd400": step_bsd400, "urban100": step_urban100, "rain_train": step_rain_train,
