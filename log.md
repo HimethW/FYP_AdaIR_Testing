@@ -752,3 +752,38 @@ are the user's call ("wait till we are done tomorrow. then i will tell next step
   weights clamped to [0.1, 0.9]. In both, the network is frozen while scoring, so the score is linear in a and the
   search always moves to whichever loss term is currently smaller; it does not test how training with a weight would
   turn out. Paper ablation (N+H+R): FMM +0.18, EOS +0.08, both +0.50 dB. No code changes made; waiting for the go.
+
+### CDD-11 run (6 classes), started 2026-11-07 17:30 on qbits
+User: train our teacher on CDD-11 (low, haze, rain, haze+rain, low+haze, low+rain) for 20 epochs on top of the
+released weights, DCPT first, then "the best training method", an evaluation after every epoch against EvoIR and
+OneRestore, equal images per class. First on Elgin, then (user) "dont use elgin for this ... use qbits".
+- Data: the 5 missing classes read from the official HF zips (tools/prepare_data.py, CDD_DIRS). qbits now has all 6
+  classes + clear: 1,183 train / 200 test each (~10.5 GB more; /home has 24 GB free). The stopped Elgin download left
+  partial folders in /mnt/minura/minura/Himeth/AdaIR/data/CDD-11 (clear, haze_rain complete; low, haze partial).
+- Held out: 40 training scenes (splits/cdd11_val_scenes.txt, seed 0), all 6 classes of each, never trained on: used
+  for validation, DCPT accuracy and the loss-mix search. The test split is only used for the per-epoch table.
+- Balance: preset `cdd6` = 1,143 per class (every training scene once per class per epoch), 6,858 per epoch,
+  214 steps of 32.
+- Start: released AdaIR **5-task** backbone (ckpt/adair5d.ckpt; same architecture, loads the same way as adair3d),
+  because it was trained on low-light images (LOL) and half of the 6 classes are low light. A smoke test from our
+  3-task DCPT weights scored 11.5 dB on low-light validation crops.
+- Stage 1, DCPT (runs/cdd6_dcpt): backbone frozen, 6-class classifier (the CDD classes), focal loss + clean-in /
+  clean-out L1, batch 2 x 16, lr 2e-4, **2,000 iterations** (main run: 5,000 over a 23x bigger set; 2,000 = ~9 passes
+  over CDD-6; main run's DCPT accuracy was 0.92 at 1,000 and 0.97 at 5,000).
+- Stage 2, fine-tune (runs/cdd6_ft): 20 epochs (4,280 steps), batch 4 x 8, lr 1e-4 -> 1e-6 cosine, warmup 2%,
+  wd 0.01, EMA 0.999, loss a*L1 + (1-a)*(1-MS-SSIM) + 0.1*FFT-L1 (3-scale MS-SSIM for 128 crops, checked against
+  torchmetrics: 0.98587 vs 0.98573), a starts at 0.8 (EvoIR).
+- Loss-mix search (our version of EvoIR's EOS): at the start of epochs 2-20, 3 candidate values of a (current +
+  2 children of the last search's best two; first search: 0.8 / 1.0 / 0.5) each train a copy of the model for 20
+  steps on the same batches; scored by PSNR on 240 centre 256-px crops of the held-out scenes (classes weigh
+  equally); the best copy and its 20 steps are kept. Smoke test (64 samples, 2-step look-ahead) ran clean.
+- Per-epoch test: EMA weights on the full CDD-11 test set (6 x 200, 1080 x 720), OneRestore's protocol (full image,
+  8-bit output, skimage PSNR / SSIM win 7: their img_file/cal_psnr_ssim.py) -> runs/cdd6_ft/test/epoch_XX.json and
+  table.md (tools/cdd_table.py, published EvoIR / OneRestore 6-class means 29.17 / 28.96 dB). TF32 inference for
+  speed: on 12 images vs true fp32, mean PSNR -0.0004 dB (max 0.011), SSIM max 0.00017; bf16 was rejected (max 0.12
+  dB). Full-resolution forward: 1.17 s/img fp32, 0.78 TF32 on the 4080 SUPER.
+- Gradient norms on CDD-11 in the smoke test: 2.6-4.7 (main run 0.08-0.77), as the friend saw; clipping stays off
+  like the main run (AdamW), NaN detector on.
+- Every epoch's weights (model + EMA) kept in runs/cdd6_ft/epochs/.
+- Launch: `setsid nohup bash scripts/run_cdd6.sh >> runs/cdd6.out 2>&1 &` (re-running resumes).
+- 2026-11-07 17:38: DCPT at step 100: 7.2 img/s (as the main run's DCPT), accuracy 0.47, ETA 2.3 h -> fine-tune from ~20:00, all 20 epochs + tests ~05:30 Nov 8 (estimate: 9 min training + 3 min search + 16 min test per epoch).
