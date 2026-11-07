@@ -854,3 +854,6 @@ OneRestore, equal images per class. First on Elgin, then (user) "dont use elgin 
   resumed with `--epochs 10` (2,140 steps; 10.5 at 128 px + 10 at 256 px = 20.5 epochs). The cosine is recomputed
   for the longer run: lr at step 288 4.84e-5 instead of 4.26e-5. Search state (a = 1.0, last search at step 214)
   restored. Expected: epoch 2 ~04:50, then every ~77 min (36 training + 11 search + 29 tiled test), epoch 10 ~15:00.
+- 2026-11-08 04:47: cdd6_ft256 **epoch 2: 27.38 / 0.8873** (+0.10): low 25.84, haze 30.00 (+0.50), rain 32.11,
+  haze+rain 27.57, low+haze 24.25, low+rain 24.52; only haze moved. (Epoch 2 includes the pause / resume at step 287
+  with the 10-epoch schedule.)
