@@ -845,3 +845,8 @@ OneRestore, equal images per class. First on Elgin, then (user) "dont use elgin 
   (where the 128-px cosine was) -> 1e-6, warm-up 2%, EMA 0.999 with warm-up, loss mix from a = 0.9058 with the
   look-ahead search, per-epoch test in 256-px tiles. Memory 13.3 GB. cdd6_ft stays paused (resumable).
   Estimate: ~36 min training + ~10 min search + ~20 min test per epoch, epoch 1 ~03:25, epoch 5 ~08:00.
+- 2026-11-08 03:33: cdd6_ft256 **epoch 1 (256-px crops): 27.28 / 0.8871** (256-px tiles), vs 27.10 for the 128-px
+  epoch 10 it started from: low 25.82, haze 29.50, rain 32.03, haze+rain 27.60 (+0.55), low+haze 24.23 (+0.61),
+  low+rain 24.51. Speed 3.2 img/s (10 s per step, 36 min per epoch); the tiled test takes 29 min (batching the
+  tiles did not shorten it: twice the pixels of the whole image with the 1/4 overlap). Revised finish: epoch 2
+  ~04:50, 3 ~06:05, 4 ~07:25, 5 ~08:40.
