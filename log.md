@@ -802,3 +802,11 @@ OneRestore, equal images per class. First on Elgin, then (user) "dont use elgin 
   The first attempt is kept as runs/cdd6_ft_ema999 (epoch-1 weights + test JSON).
 - 2026-11-07 20:43: fine-tune restarted from runs/cdd6_dcpt/last.pt with `--ema_warmup` (everything else the same).
   New estimate: epoch 1 test ~21:10, then every ~28 min, all 20 epochs ~06:00 Nov 8.
+- 2026-11-07 23:39: CDD-11 fine-tune at epoch 6 of 20 (on schedule). Full-test mean PSNR by epoch (EMA, OneRestore
+  protocol): 23.49, 24.64, 25.14, 25.48, 25.78, 25.88 (EvoIR 29.17, OneRestore 28.96); gains shrinking (+0.10 at
+  epoch 6). Search kept a = 1.0, 0.893, 0.808, 0.826, 0.769, 0.783. Gap at epoch 6 by class: low -1.2, rain -1.7,
+  low+rain -1.9, low+haze -4.5, haze -4.8, haze+rain -5.7: **the haze classes are most of the gap.**
+  Held-out scenes at epoch 6, 256-px centre crops (40 scenes, search) vs whole images (5 scenes, epoch val): haze
+  32.3 vs 29.2, haze+rain 28.2 vs 25.1, while low / rain / low+haze / low+rain are within ~1 dB. Not the same images,
+  so only a hint: haze may be removed well on small regions but not across the whole 1080 x 720 image (we train on
+  128-px crops).
