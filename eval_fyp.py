@@ -6,7 +6,8 @@
   python eval_fyp.py --ckpt runs/shaped_aio3mix/last.pt --variant shaped --sets main extra --out runs/shaped_aio3mix/eval.json
 
 --sets takes preset names (paper3, main, extra; see fyp/evaluate.py) and/or set names.
---protocol adair (default) centre-crops to a multiple of 16 like AdaIR's test.py; full uses whole images.
+--protocol adair (default) centre-crops to a multiple of 16 like AdaIR's test.py; full uses whole images;
+onerestore = full + 8-bit output, the CDD-11 protocol of OneRestore / EvoIR (use it with --sets cdd6).
 Writes a JSON with per-set means and per-image PSNR / SSIM (for paired comparisons).
 """
 import argparse
@@ -26,7 +27,7 @@ def main():
     p.add_argument("--variant", choices=VARIANTS, default=None, help="default: taken from our checkpoint")
     p.add_argument("--ema", action="store_true", help="use the EMA weights of one of our checkpoints")
     p.add_argument("--sets", nargs="+", default=["main"])
-    p.add_argument("--protocol", choices=("adair", "full"), default="adair")
+    p.add_argument("--protocol", choices=("adair", "full", "onerestore"), default="adair")
     p.add_argument("--limit", type=int, default=None)
     p.add_argument("--save_images", default=None)
     p.add_argument("--out", default=None)

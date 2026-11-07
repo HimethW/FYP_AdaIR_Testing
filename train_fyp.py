@@ -19,6 +19,23 @@ is the same 32 crops per step as 4 x 8 on one GPU (no BatchNorm, so the gradient
 Checkpoints are interchangeable between 1 and N GPUs.
   torchrun --standalone --nproc_per_node 2 train_fyp.py ... --batch 4 --accum 4
 
+CDD-11 run (--tasks cdd6, its own 6 DCPT classes; --epochs N sets iters = N x steps per epoch and keeps the
+weights at the end of every epoch in <run>/epochs/epoch_XX.pt):
+  python train_fyp.py --name cdd6_dcpt --stage dcpt --tasks cdd6 --iters 2000 --batch 2 --accum 16 \
+      --init ckpt/adair3d.ckpt --init_backbone --freeze_backbone -1
+  python train_fyp.py --name cdd6_ft --tasks cdd6 --epochs 20 --init runs/cdd6_dcpt/last.pt --lr 1e-4 \
+      --warmup 0.02 --ema 0.999 --loss mix --mix_search
+
+Loss-mix search (--loss mix --mix_search), after EvoIR's evolutionary loss weighting (arXiv 2512.05104):
+the loss is a * L1 + (1 - a) * (1 - MS-SSIM) + 0.1 * FFT-L1 (patches/losses.py MixLoss). At the start of every
+epoch from the second on, --mix_pop candidate values of a (the current one + children of the two best from the
+last search: a random blend of the two plus Gaussian noise, kept in --mix_bounds) each train a copy of the model
+for --mix_k optimiser steps on the same batches, and are scored by PSNR on the held-out validation crops (40
+scenes x 6 classes, centre --mix_crop crops; classes weigh equally). The best copy is kept, with its steps (the
+batches are the first ones of the epoch, so no data is lost), and its a is used until the next search. EvoIR
+scores candidates on frozen weights, which always favours whichever loss term is currently smaller; training a
+copy per candidate measures what each mix actually does to the restored images.
+
 Precision: true fp32 by default (TF32 off; --tf32 / --precision bf16 trade accuracy for speed, results.md A12).
 Defaults follow AdaIR's train.py where it has one (AdamW lr 2e-4, default weight decay 0.01, warmup then
 cosine, 128 crops, effective batch 32 = 4 x 8 accumulation on one 16 GB GPU) and the DCPT code for the DCPT
@@ -26,10 +43,12 @@ stage (net AdamW lr 2e-4 wd 0, classifier AdamW lr 5e-5 wd 1e-4, focal loss, L1 
 """
 import argparse
 import contextlib
+import copy
 import datetime
 import json
 import math
 import os
+import random
 import signal
 import sys
 import time
@@ -43,11 +62,11 @@ from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 from torch.utils.tensorboard import SummaryWriter
 
-from fyp.data import CLASS_NAMES, LABELS, TrainSet, parse_tasks, worker_init
+from fyp.data import CDD_CLASSES, LABELS, TrainSet, class_names, is_cdd, parse_tasks, worker_init
 from fyp.evaluate import evaluate, load_sample, resolve, test_sets
 from fyp.models import VARIANTS, build_model, is_backbone, load_weights
 from patches.dcpt import DCPT
-from patches.losses import PixelFFTLoss
+from patches.losses import MixLoss, PixelFFTLoss
 
 VAL_SETS = ["bsd68_s25", "rain100l", "sots_unseen", "haze_noise25_unseen", "rain_noise25", "haze_rain_unseen",
             "haze_rain_cdd11"]
@@ -55,6 +74,9 @@ VAL_SETS = ["bsd68_s25", "rain100l", "sots_unseen", "haze_noise25_unseen", "rain
 DCPT_VAL = {"bsd68_s25": LABELS["denoise"], "rain100l": LABELS["derain"], "sots_unseen": LABELS["dehaze"],
             "haze_noise25_unseen": LABELS["haze_noise"], "rain_noise25": LABELS["rain_noise"],
             "haze_rain_unseen": LABELS["haze_rain"], "haze_rain_cdd11": LABELS["haze_rain_cdd11"]}
+# CDD-11 run: validation and DCPT checks on the 40 held-out training scenes (the test split is never used here)
+CDD_VAL_SETS = [f"cdd11val_{c}" for c in CDD_CLASSES]
+CDD_DCPT_VAL = {f"cdd11val_{c}": LABELS[f"cdd_{c}"] for c in CDD_CLASSES}
 
 
 def get_args():
@@ -63,7 +85,10 @@ def get_args():
     p.add_argument("--stage", choices=("restore", "dcpt"), default="restore")
     p.add_argument("--variant", choices=VARIANTS, default="shaped")
     p.add_argument("--tasks", default="aio3_mix", help="preset (aio3, aio3_mix) or task:count,task:count")
-    p.add_argument("--iters", type=int, required=True, help="optimiser steps")
+    p.add_argument("--iters", type=int, default=0, help="optimiser steps (or give --epochs)")
+    p.add_argument("--epochs", type=int, default=0,
+                   help="> 0: iters = epochs x (samples per epoch // samples per step), and the weights (model + EMA) "
+                        "are kept at the end of every epoch in <run>/epochs/epoch_XX.pt")
     p.add_argument("--batch", type=int, default=4)
     p.add_argument("--accum", type=int, default=8)
     p.add_argument("--patch", type=int, default=128)
@@ -71,7 +96,15 @@ def get_args():
     p.add_argument("--min_lr", type=float, default=1e-6)
     p.add_argument("--wd", type=float, default=None, help="default 0.01 (restore, AdaIR) / 0 (dcpt net, DCPT)")
     p.add_argument("--warmup", type=float, default=15 / 180, help="fraction of iters (AdaIR: 15 of 180 epochs)")
-    p.add_argument("--loss", choices=("l1", "l1_fft"), default="l1_fft")
+    p.add_argument("--loss", choices=("l1", "l1_fft", "mix"), default="l1_fft",
+                   help="mix = a * L1 + (1 - a) * (1 - MS-SSIM) + fft_weight * FFT-L1")
+    p.add_argument("--mix_a", type=float, default=0.8, help="starting L1 weight a of --loss mix (EvoIR's start)")
+    p.add_argument("--mix_search", action="store_true", help="look-ahead search of a every epoch (see above)")
+    p.add_argument("--mix_pop", type=int, default=3, help="candidates per search (the current a included)")
+    p.add_argument("--mix_k", type=int, default=20, help="look-ahead optimiser steps per candidate")
+    p.add_argument("--mix_bounds", type=float, nargs=2, default=(0.1, 1.0), help="range of a (1 = no MS-SSIM)")
+    p.add_argument("--mix_sigma", type=float, default=0.1, help="std of the mutation added to a child")
+    p.add_argument("--mix_crop", type=int, default=256, help="centre crop of the validation images for the search")
     p.add_argument("--fft_weight", type=float, default=0.1)
     p.add_argument("--fft_norm", choices=("backward", "ortho"), default="backward")
     p.add_argument("--precision", choices=("fp32", "bf16"), default="fp32",
@@ -97,6 +130,14 @@ def get_args():
     p.add_argument("--log_every", type=int, default=100)
     p.add_argument("--val_every", type=int, default=5000)
     p.add_argument("--val_n", type=int, default=10, help="images per validation set")
+    p.add_argument("--test_sets", nargs="*", default=[],
+                   help="with --epochs: evaluate the EMA weights on these full test sets after every epoch, written "
+                        "to <run>/test/epoch_XX.json (+ the CDD-11 comparison table for cdd6)")
+    p.add_argument("--test_protocol", default="onerestore", choices=("adair", "full", "onerestore"))
+    p.add_argument("--test_tf32", action="store_true",
+                   help="TF32 inference for the per-epoch test (1.5x faster; -0.0004 dB mean vs fp32 on a check)")
+    p.add_argument("--test_workers", type=int, default=8, help="CPU threads for loading and metrics")
+    p.add_argument("--test_limit", type=int, default=None, help="first N images per test set (smoke tests only)")
     p.add_argument("--ckpt_every", type=int, default=1000)
     p.add_argument("--keep_every", type=int, default=20000)
     p.add_argument("--data", default="data")
@@ -152,10 +193,10 @@ def shape_stats(model):
 
 
 @torch.no_grad()
-def dcpt_accuracy(dcpt, sets, n, device, crop=256):
+def dcpt_accuracy(dcpt, sets, n, device, crop=256, labels=None):
     dcpt.eval()
     correct, total, per = 0, 0, {}
-    for name, label in DCPT_VAL.items():
+    for name, label in (labels or DCPT_VAL).items():
         if name not in sets:
             continue
         spec = sets[name]
@@ -180,6 +221,48 @@ def save(path, payload):
     os.replace(tmp, path)
 
 
+def to_cpu(obj):
+    """Deep copy of a (nested) state dict with every tensor cloned to the CPU."""
+    if torch.is_tensor(obj):
+        return obj.detach().to("cpu", copy=True)
+    if isinstance(obj, dict):
+        return {k: to_cpu(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return type(obj)(to_cpu(v) for v in obj)
+    return copy.deepcopy(obj)
+
+
+def load_crops(sets, names, crop):
+    """Centre crops of the held-out validation pairs: {set: (lq NCHW, gt NCHW)} on the CPU, in [0, 1]."""
+    out = {}
+    for name in names:
+        lqs, gts = [], []
+        for i in range(len(sets[name]["pairs"])):
+            _, lq, gt = load_sample(sets[name], i, "full")
+            h, w = lq.shape[:2]
+            y, x = (h - crop) // 2, (w - crop) // 2
+            lqs.append(torch.from_numpy(lq[y:y + crop, x:x + crop].copy()).permute(2, 0, 1))
+            gts.append(torch.from_numpy(gt[y:y + crop, x:x + crop].copy()).permute(2, 0, 1))
+        out[name] = (torch.stack(lqs).float().div(255), torch.stack(gts).float().div(255))
+    return out
+
+
+@torch.no_grad()
+def crop_psnr(model, crops, device, bs=8):
+    """Mean PSNR per set on the crops, and their mean over sets (every class weighs the same)."""
+    model.eval()
+    per = {}
+    for name, (lq, gt) in crops.items():
+        vals = []
+        for i in range(0, len(lq), bs):
+            y = model(lq[i:i + bs].to(device)).float().clamp(0, 1)
+            mse = (y - gt[i:i + bs].to(device)).pow(2).flatten(1).mean(1)
+            vals.append(10 * torch.log10(1 / mse.clamp_min(1e-12)))
+        per[name] = float(torch.cat(vals).mean())
+    model.train()
+    return float(np.mean(list(per.values()))), per
+
+
 def main():
     args = get_args()
     world = int(os.environ.get("WORLD_SIZE", 1))  # > 1 when started with torchrun
@@ -195,6 +278,16 @@ def main():
     log = Logger(os.path.join(run, "train.log")) if main_proc else (lambda msg: None)
     if args.wd is None:
         args.wd = 0.0 if args.stage == "dcpt" else 0.01
+    counts = parse_tasks(args.tasks)
+    data = TrainSet(counts, root=args.data, patch=args.patch, seed=args.seed)
+    per_step = args.batch * args.accum * world
+    steps_per_epoch = len(data) // per_step
+    if args.epochs > 0:
+        args.iters = args.epochs * steps_per_epoch
+    if args.iters <= 0:
+        raise SystemExit("give --iters or --epochs")
+    if args.mix_search and not (args.loss == "mix" and args.stage == "restore" and world == 1):
+        raise SystemExit("--mix_search needs --loss mix, the restore stage and one GPU")
     if main_proc:
         with open(os.path.join(run, "args.json"), "w") as f:
             json.dump(vars(args), f, indent=1)
@@ -214,9 +307,8 @@ def main():
         if missing:
             log(f"  fresh: {sorted({'.'.join(k.split('.')[:2]) for k in missing})}")
 
-    counts = parse_tasks(args.tasks)
     if args.stage == "dcpt":
-        dcpt = DCPT(model, num_classes=len(CLASS_NAMES)).to(device).train()
+        dcpt = DCPT(model, num_classes=len(class_names(counts))).to(device).train()
         opt_net, opt_cls = dcpt.optimizers(lr_net=args.lr)
         for g in opt_net.param_groups:
             g["weight_decay"] = args.wd
@@ -227,7 +319,10 @@ def main():
     min_ratio = args.min_lr / args.lr
     schedulers = [torch.optim.lr_scheduler.LambdaLR(o, lambda s: lr_factor(s, args.iters, args.warmup, min_ratio))
                   for o in optimizers]
-    loss_fn = PixelFFTLoss(args.fft_weight, args.fft_norm) if args.loss == "l1_fft" else None
+    if args.loss == "mix":
+        loss_fn = MixLoss(args.mix_a, args.fft_weight, args.fft_norm)
+    else:
+        loss_fn = PixelFFTLoss(args.fft_weight, args.fft_norm) if args.loss == "l1_fft" else None
 
     def set_backbone_frozen(frozen):
         n = 0
@@ -240,13 +335,21 @@ def main():
         log(f"backbone {'frozen' if frozen else 'trainable'}: {n / 1e6:.2f}M trainable params")
     ema = EMA(model, args.ema) if args.ema > 0 and main_proc else None
 
-    data = TrainSet(counts, root=args.data, patch=args.patch, seed=args.seed)
-    per_step = args.batch * args.accum * world
     log(f"train set: {len(data)} samples / epoch from {counts}; {args.iters} iters x {per_step} "
-        f"= {args.iters * per_step / len(data):.2f} epochs" + (f" ({world} GPUs)" if world > 1 else ""))
+        f"= {args.iters * per_step / len(data):.2f} epochs ({steps_per_epoch} steps / epoch)"
+        + (f" ({world} GPUs)" if world > 1 else ""))
     sets = test_sets(args.data)
-    val_names = resolve(VAL_SETS, sets)
+    cdd = is_cdd(counts)
+    val_names = resolve(CDD_VAL_SETS if cdd else VAL_SETS, sets)
+    dcpt_labels = CDD_DCPT_VAL if cdd else DCPT_VAL
     log(f"params: {sum(p.numel() for p in model.parameters()) / 1e6:.2f}M; val sets: {val_names}")
+    mix = None
+    if args.mix_search:
+        mix = {"a": args.mix_a, "pop": [], "last": 0, "history": []}  # "last": step of the last search
+        mix_crops = load_crops(sets, val_names, args.mix_crop)
+        mix_rng = random.Random(args.seed + 2024)
+        log(f"mix search: {sum(len(v[0]) for v in mix_crops.values())} validation crops of {args.mix_crop} px, "
+            f"{args.mix_pop} candidates x {args.mix_k} steps at the start of epochs 2-{args.epochs or '?'}")
 
     step, epoch = 0, 0
     last = os.path.join(run, "last.pt")
@@ -262,10 +365,14 @@ def main():
         if ema is not None and ck.get("ema"):
             ema.state = {k: v.to(device) for k, v in ck["ema"].items()}  # loaded on CPU; the model is on the GPU
         step, epoch = ck["step"], ck["epoch"] + 1
+        if mix is not None and ck.get("mix"):
+            mix.update(ck["mix"])
+        if args.loss == "mix":
+            loss_fn.a = (ck.get("mix") or {}).get("a", loss_fn.a)
         log(f"resumed from {last} at step {step} (starting epoch {epoch})")
 
     def checkpoint(path):
-        save(path, {"model": model.state_dict(), "ema": ema.state if ema else None,
+        save(path, {"model": model.state_dict(), "ema": ema.state if ema else None, "mix": mix,
                     "classifier": dcpt.classifier.state_dict() if dcpt is not None else None,
                     "optimizers": [o.state_dict() for o in optimizers],
                     "schedulers": [s.state_dict() for s in schedulers],
@@ -324,8 +431,89 @@ def main():
 
     def report(msg):  # every process: other GPUs have no train.log, so print to the shared console
         log(msg) if main_proc else print(f"[rank {rank}] {msg}", flush=True)
+
+    # ---- loss-mix search (one GPU, restore stage) ----
+    def snapshot():
+        return {"model": to_cpu(model.state_dict()), "opt": [to_cpu(o.state_dict()) for o in optimizers],
+                "sch": [copy.deepcopy(s.state_dict()) for s in schedulers],
+                "ema": to_cpu(ema.state) if ema is not None else None, "step": step}
+
+    def restore(snap):
+        nonlocal step
+        model.load_state_dict(snap["model"])
+        for o, s in zip(optimizers, snap["opt"]):
+            o.load_state_dict(to_cpu(s))  # a fresh copy: the loaded "step" tensors are updated in place
+        for sch, s in zip(schedulers, snap["sch"]):
+            sch.load_state_dict(copy.deepcopy(s))
+        if ema is not None:
+            ema.state = {k: v.to(device, copy=True) for k, v in snap["ema"].items()}
+        step = snap["step"]
+
+    def lookahead_step(micro):
+        for o in optimizers:
+            o.zero_grad(set_to_none=True)
+        for b in micro:
+            lq, gt = b["lq"].to(device, non_blocking=True), b["gt"].to(device, non_blocking=True)
+            with autocast:
+                loss, _ = loss_fn(net(lq).float(), gt)
+            (loss / args.accum).backward()
+        grads = [p.grad for p in model.parameters() if p.grad is not None]
+        if not math.isfinite(float(torch.linalg.vector_norm(torch.stack(torch._foreach_norm(grads))))):
+            return False
+        if args.clip > 0:
+            torch.nn.utils.clip_grad_norm_([p for p in model.parameters() if p.requires_grad], args.clip)
+        for o in optimizers:
+            o.step()
+        for s in schedulers:
+            s.step()
+        if ema is not None:
+            ema.update(model)
+        return True
+
+    def mix_search():
+        nonlocal step
+        t_start, start_step = time.time(), step
+        lo, hi = args.mix_bounds
+        if not mix["pop"]:  # first search: the current a (EvoIR's start), our original loss (a = 1), an even split
+            cands = [mix["a"], 1.0, 0.5]
+        else:  # the current a + children of the two best of the last search
+            parents = sorted(mix["pop"], reverse=True)[:2]
+            cands = [mix["a"]]
+            while len(cands) < args.mix_pop:
+                lam = mix_rng.random()
+                cands.append(lam * parents[0][1] + (1 - lam) * parents[-1][1] + mix_rng.gauss(0, args.mix_sigma))
+        cands = [round(min(max(c, lo), hi), 4) for c in cands[:args.mix_pop]]
+        micro = [next(stream) for _ in range(args.mix_k * args.accum)]  # the same batches for every candidate
+        start = snapshot()
+        best, scored = None, []
+        for a in cands:
+            restore(start)
+            loss_fn.a = a
+            ok = True
+            for j in range(args.mix_k):
+                if not lookahead_step(micro[j * args.accum:(j + 1) * args.accum]):
+                    ok = False
+                    break
+                step += 1
+            fit, per = crop_psnr(model, mix_crops, device) if ok else (-float("inf"), {})
+            scored.append((fit, a))
+            log(f"mix search @ step {start_step}: a {a:.4f} -> {'ok' if ok else 'non-finite gradient'}, "
+                f"val crops PSNR {fit:.3f} (" + " ".join(f"{k.split('_', 1)[1]} {v:.2f}" for k, v in per.items()) + ")")
+            if best is None or fit > best[0]:
+                best = (fit, a, snapshot())
+        restore(best[2])
+        loss_fn.a = mix["a"] = best[1]
+        mix["pop"], mix["last"] = scored, start_step
+        mix["history"].append({"step": start_step, "scored": scored, "chosen": best[1]})
+        log(f"mix search @ step {start_step}: keep a = {best[1]:.4f} and its {args.mix_k} steps, now at step {step} "
+            f"({time.time() - t_start:.0f}s)")
+        write_metrics({"mix/a": best[1], "mix/val_crop_psnr": best[0], "mix/seconds": time.time() - t_start})
+
     try:
         while step < args.iters and not stop["flag"]:
+            if mix is not None and step > 0 and step % steps_per_epoch == 0 and step != mix["last"]:
+                mix_search()
+                acc, t0, n_img = {}, time.time(), 0
             if frozen and args.freeze_backbone > 0 and step >= args.freeze_backbone:
                 frozen = False
                 set_backbone_frozen(False)
@@ -408,6 +596,8 @@ def main():
                 m["lr"] = schedulers[0].get_last_lr()[0]
                 m["img_per_s"] = n_img * world / dt
                 m["epoch"] = epoch
+                if args.loss == "mix":
+                    m["mix_a"] = loss_fn.a
                 m.update(shape_stats(model))
                 eta = (args.iters - step) * per_step / max(m["img_per_s"], 1e-6)
                 log(f"step {step}/{args.iters} ep {epoch} " + " ".join(f"{k.split('/')[-1]} {v:.4g}" for k, v in m.items()
@@ -417,10 +607,11 @@ def main():
             if step % args.log_every == 0 or step == 1:
                 acc, t0, n_img = {}, time.time(), 0
 
-            validate = step % args.val_every == 0 or step == args.iters
+            end_of_epoch = args.epochs > 0 and step % steps_per_epoch == 0
+            validate = step % args.val_every == 0 or step == args.iters or end_of_epoch
             if validate and main_proc:
                 if dcpt is not None:
-                    top1, per = dcpt_accuracy(dcpt, sets, args.val_n, device)
+                    top1, per = dcpt_accuracy(dcpt, sets, args.val_n, device, labels=dcpt_labels)
                     log(f"val dcpt top-1 {top1:.3f} " + " ".join(f"{k} {v:.2f}" for k, v in per.items()))
                     write_metrics({"val/dcpt_top1": top1, **{f"val/dcpt_{k}": v for k, v in per.items()}})
                 else:
@@ -441,6 +632,42 @@ def main():
                 checkpoint(last)
             if main_proc and step % args.keep_every == 0:
                 checkpoint(os.path.join(run, f"iter_{step:07d}.pt"))
+            if main_proc and end_of_epoch:  # every epoch's weights are kept (no optimiser state)
+                os.makedirs(os.path.join(run, "epochs"), exist_ok=True)
+                ep = step // steps_per_epoch
+                save(os.path.join(run, "epochs", f"epoch_{ep:02d}.pt"),
+                     {"model": model.state_dict(), "ema": ema.state if ema else None, "step": step, "epoch": ep,
+                      "variant": args.variant, "stage": args.stage, "mix_a": getattr(loss_fn, "a", None),
+                      "args": vars(args)})
+                log(f"epoch {ep} done (step {step}): weights kept in epochs/epoch_{ep:02d}.pt")
+                if args.test_sets:
+                    t_test = time.time()
+                    test_net = build_model(args.variant).to(device)
+                    test_net.load_state_dict(ema.state if ema is not None else model.state_dict())
+                    torch.backends.cudnn.allow_tf32 = torch.backends.cuda.matmul.allow_tf32 = args.test_tf32
+                    log(f"test after epoch {ep} ({'ema' if ema else 'model'}, {args.test_protocol}"
+                        f"{', tf32' if args.test_tf32 else ''}):")
+                    res = evaluate(test_net, sets, resolve(args.test_sets, sets), device=device,
+                                   protocol=args.test_protocol, log=log, workers=args.test_workers,
+                                   limit=args.test_limit)
+                    torch.backends.cudnn.allow_tf32 = torch.backends.cuda.matmul.allow_tf32 = args.tf32
+                    del test_net
+                    model.train()
+                    os.makedirs(os.path.join(run, "test"), exist_ok=True)
+                    with open(os.path.join(run, "test", f"epoch_{ep:02d}.json"), "w") as f:
+                        json.dump({"epoch": ep, "step": step, "ema": ema is not None, "protocol": args.test_protocol,
+                                   "tf32": args.test_tf32, "mix_a": getattr(loss_fn, "a", None), "results": res}, f)
+                    mean_psnr = float(np.mean([v["psnr"] for v in res.values()]))
+                    mean_ssim = float(np.mean([v["ssim"] for v in res.values()]))
+                    write_metrics({"test/mean_psnr": mean_psnr, "test/mean_ssim": mean_ssim,
+                                   **{f"test/{k}_psnr": v["psnr"] for k, v in res.items()}})
+                    if cdd:
+                        from tools.cdd_table import table
+                        with open(os.path.join(run, "test", "table.md"), "w") as f:
+                            f.write(table(run))
+                    log(f"test after epoch {ep}: mean PSNR {mean_psnr:.3f} SSIM {mean_ssim:.4f} "
+                        f"({time.time() - t_test:.0f}s)")
+                    t0 = time.time()
             if world > 1 and (validate or save_now):
                 dist.barrier()
                 t0 = time.time()

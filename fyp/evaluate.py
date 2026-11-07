@@ -4,6 +4,12 @@ Protocols:
   adair  AdaIR's test.py: every image (clean and degraded) centre-cropped to a multiple of 16
          (utils.image_utils.crop_img), noise added after cropping. Use this to compare with the paper.
   full   whole image, reflect-padded to a multiple of 16 for the network, output cropped back.
+  onerestore  `full` + the output rounded to 8 bits before the metrics, as OneRestore's CDD-11 protocol
+         (test.py saves PNGs with torchvision save_image, img_file/cal_psnr_ssim.py reads them back and uses
+         skimage PSNR / SSIM, data_range 1, win_size 7, channel_axis -1: the same metric calls as fyp/metrics.py).
+         The published CDD-11 tables (OneRestore, EvoIR) use it, so use it to compare with them.
+CDD-11 sets: cdd11_<class> = the official test split (200 each); cdd11val_<class> = the 40 held-out training
+scenes (splits/cdd11_val_scenes.txt), never trained on, for validation and the loss-mix search.
 Noise for the synthetic denoise sets is seeded per image (crc32 of name and sigma), so results do
 not depend on file order (AdaIR's test.py uses one global seed in os.listdir order).
 Very large images (O-HAZE ~ 12 MP) are run in overlapping tiles (`max_pixels`, `tile`, `overlap`).
@@ -11,12 +17,14 @@ Very large images (O-HAZE ~ 12 MP) are run in overlapping tiles (`max_pixels`, `
 import glob
 import os
 import zlib
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 import torch
 import torch.nn.functional as F
 from PIL import Image
 
+from fyp.data import CDD_CLASSES, cdd_val_scenes
 from fyp.metrics import psnr_ssim
 from tools.mixtures import add_noise
 from utils.image_utils import crop_img
@@ -79,6 +87,16 @@ def test_sets(root="data"):
     sets["ohaze_41_45"] = dict(kind="pairs", pairs=[p for p in ohaze if 41 <= int(os.path.basename(p[0])[:2]) <= 45])
     sets["nhhaze"] = dict(kind="pairs", pairs=nhhaze)
     sets["nhhaze_51_55"] = dict(kind="pairs", pairs=[p for p in nhhaze if 51 <= int(os.path.basename(p[0])[:2]) <= 55])
+    cdd = os.path.join(root, "CDD-11")
+    held_out = cdd_val_scenes()
+    for c in CDD_CLASSES:
+        for tag, split, keep in (("cdd11", "test", None), ("cdd11val", "train", held_out)):
+            folder = os.path.join(cdd, split, c)
+            if not os.path.isdir(folder):
+                continue
+            names = sorted(f for f in os.listdir(folder) if keep is None or f in keep)
+            sets[f"{tag}_{c}"] = dict(kind="pairs", pairs=[(os.path.join(folder, f), os.path.join(cdd, split, "clear", f))
+                                                           for f in names])
     return {k: v for k, v in sets.items() if (v.get("pairs") or v.get("clean"))}
 
 
@@ -86,6 +104,8 @@ PRESETS = {
     "paper3": ["bsd68_s15", "bsd68_s25", "bsd68_s50", "rain100l", "sots"],
     "main": ["bsd68_s15", "bsd68_s25", "bsd68_s50", "rain100l", "sots", "sots_unseen", "sots_seen",
              "haze_noise25", "haze_noise25_unseen", "rain_noise25", "haze_rain", "haze_rain_unseen", "haze_rain_cdd11"],
+    "cdd6": [f"cdd11_{c}" for c in CDD_CLASSES],
+    "cdd6val": [f"cdd11val_{c}" for c in CDD_CLASSES],
     "extra": ["urban100_s15", "urban100_s25", "urban100_s50", "kodak24_s15", "kodak24_s25", "kodak24_s50",
               "ohaze_41_45", "nhhaze_51_55", "ohaze", "nhhaze"],
 }
@@ -150,25 +170,40 @@ def run_model(model, x, mult=16, max_pixels=2_600_000, tile=1024, overlap=64):
 
 
 @torch.no_grad()
-def evaluate(model, sets, names, device="cuda", protocol="adair", limit=None, save_dir=None, log=print):
-    """Returns {set: {"psnr", "ssim", "n", "per_image": {name: [psnr, ssim]}}}."""
+def evaluate(model, sets, names, device="cuda", protocol="adair", limit=None, save_dir=None, log=print, workers=0):
+    """Returns {set: {"psnr", "ssim", "n", "per_image": {name: [psnr, ssim]}}}.
+    workers > 0: image loading and the (CPU) metrics run in that many threads while the GPU works; same numbers."""
     model.eval()
     results = {}
+    pool = ThreadPoolExecutor(workers) if workers > 0 else None
     for name in names:
         spec = sets[name]
         n = size(spec) if limit is None else min(limit, size(spec))
-        per = {}
+        per, pending = {}, []
+        loads = [pool.submit(load_sample, spec, i, protocol) for i in range(n)] if pool else None
         for i in range(n):
-            img_name, lq, gt = load_sample(spec, i, protocol)
+            img_name, lq, gt = loads[i].result() if pool else load_sample(spec, i, protocol)
+            if pool:
+                loads[i] = None
             x = torch.from_numpy(lq).permute(2, 0, 1)[None].float().div(255).to(device)
             y = run_model(model, x).clamp(0, 1)
-            per[img_name] = psnr_ssim(y, torch.from_numpy(gt).permute(2, 0, 1).float().div(255))
+            if protocol == "onerestore":  # as torchvision save_image -> PNG: floor(255 x + 0.5)
+                y = torch.floor(y * 255 + 0.5) / 255
+            gt_t = torch.from_numpy(gt).permute(2, 0, 1).float().div(255)
+            if pool:
+                pending.append((img_name, pool.submit(psnr_ssim, y.cpu(), gt_t)))
+            else:
+                per[img_name] = psnr_ssim(y, gt_t)
             if save_dir:
                 os.makedirs(os.path.join(save_dir, name), exist_ok=True)
                 Image.fromarray((y[0].permute(1, 2, 0).cpu().numpy() * 255).round().astype(np.uint8)).save(
                     os.path.join(save_dir, name, os.path.splitext(img_name)[0] + ".png"))
+        for img_name, f in pending:
+            per[img_name] = f.result()
         vals = np.array(list(per.values()))
         results[name] = {"psnr": float(vals[:, 0].mean()), "ssim": float(vals[:, 1].mean()), "n": n,
                          "per_image": {k: [float(a), float(b)] for k, (a, b) in per.items()}}
         log(f"  {name:22} n={n:4d}  PSNR {results[name]['psnr']:.3f}  SSIM {results[name]['ssim']:.4f}")
+    if pool:
+        pool.shutdown()
     return results

@@ -12,12 +12,19 @@ Tasks (label used by DCPT; both haze+rain sources share a class):
   haze_rain        5  OTS hazy + streak layer of a random Rain100L train pair -> clear
   haze_rain_cdd11  5  CDD-11 train haze_rain -> clear                              (data/CDD-11/train)
 
+CDD-11 run (its own 6 DCPT classes, not mixed with the tasks above):
+  cdd_low 0, cdd_haze 1, cdd_rain 2, cdd_haze_rain 3, cdd_low_haze 4, cdd_low_rain 5
+  CDD-11 train/<class> -> train/clear, minus the 40 scenes in splits/cdd11_val_scenes.txt (held out for
+  validation and the loss-mix search; every class shares the same scenes, so no held-out scene is ever trained on)
+
 An epoch has a fixed number of samples per task (`counts`): every item of a task is used
 count // n times plus a random remainder, like AdaIR's list repetition. Presets:
   aio3      AdaIR's own all-in-one 3-task composition: denoise 15,432 (5,144 x 3 sigmas),
             derain 24,000 (200 x 120), dehaze 72,135
   aio3_mix  aio3 + 12,000 each of haze_noise, rain_noise, haze_rain, haze_rain_cdd11
             (mixture sizes are our choice; the old ratios are unknown)
+  cdd6      the 6 CDD-11 classes, 1,143 each (every training scene once per class per epoch, so the
+            classes are exactly balanced): 6,858 samples
 """
 import os
 import random
@@ -33,12 +40,35 @@ from utils.image_utils import random_augmentation
 LABELS = {"denoise": 0, "derain": 1, "dehaze": 2, "haze_noise": 3, "rain_noise": 4,
           "haze_rain": 5, "haze_rain_cdd11": 5}
 CLASS_NAMES = ["noise", "rain", "haze", "haze+noise", "rain+noise", "haze+rain"]
+CDD_CLASSES = ("low", "haze", "rain", "haze_rain", "low_haze", "low_rain")  # CDD-11 folder names
+CDD_CLASS_NAMES = ["low", "haze", "rain", "haze+rain", "low+haze", "low+rain"]
+for _i, _c in enumerate(CDD_CLASSES):
+    LABELS[f"cdd_{_c}"] = _i
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CDD_VAL_SPLIT = os.path.join(REPO, "splits/cdd11_val_scenes.txt")
 SIGMAS = (15, 25, 50)
 PRESETS = {
     "aio3": {"denoise": 15432, "derain": 24000, "dehaze": 72135},
     "aio3_mix": {"denoise": 15432, "derain": 24000, "dehaze": 72135, "haze_noise": 12000,
                  "rain_noise": 12000, "haze_rain": 12000, "haze_rain_cdd11": 12000},
+    "cdd6": {f"cdd_{c}": 1143 for c in CDD_CLASSES},
 }
+
+
+def is_cdd(counts):
+    return any(t.startswith("cdd_") for t in counts)
+
+
+def class_names(counts):
+    """DCPT class names for a task mix (the CDD-11 run has its own 6 classes)."""
+    if is_cdd(counts):
+        assert all(t.startswith("cdd_") for t in counts), "CDD-11 classes cannot be mixed with the other tasks"
+        return CDD_CLASS_NAMES
+    return CLASS_NAMES
+
+
+def cdd_val_scenes():
+    return {l.strip() for l in open(CDD_VAL_SPLIT) if l.strip()}
 
 
 def parse_tasks(spec):
@@ -83,6 +113,14 @@ class TrainSet(Dataset):
             d = os.path.join(root, "CDD-11/train")
             self.items["haze_rain_cdd11"] = [(f"{d}/haze_rain/{f}", f"{d}/clear/{f}")
                                              for f in sorted(os.listdir(f"{d}/haze_rain"))]
+        cdd = [t for t in counts if t.startswith("cdd_")]
+        if cdd:
+            d = os.path.join(root, "CDD-11/train")
+            held_out = cdd_val_scenes()
+            for task in cdd:
+                c = task[len("cdd_"):]
+                self.items[task] = [(f"{d}/{c}/{f}", f"{d}/clear/{f}")
+                                    for f in sorted(os.listdir(f"{d}/{c}")) if f not in held_out]
         for task in counts:
             if not self.items.get(task):
                 raise RuntimeError(f"no training data found for task {task} under {root}")
@@ -118,7 +156,8 @@ class TrainSet(Dataset):
         if task == "denoise":
             (gt,) = self._crop(read(self.items[task][k]))
             lq = add_noise(gt, random.choice(SIGMAS), rng)
-        elif task in ("derain", "rain_noise", "dehaze", "haze_noise", "haze_rain", "haze_rain_cdd11"):
+        elif task in ("derain", "rain_noise", "dehaze", "haze_noise", "haze_rain", "haze_rain_cdd11") \
+                or task.startswith("cdd_"):
             lq_path, gt_path = self.items[task][k]
             lq, gt = self._crop(read(lq_path), read(gt_path))
             if task in ("haze_noise", "rain_noise"):
