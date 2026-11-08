@@ -916,3 +916,7 @@ OneRestore, equal images per class. First on Elgin, then (user) "dont use elgin 
 - 2026-11-08 17:16: **runs/cdd6_ft384** started (384-px crops, 5 epochs, --grad_ckpt): 5.7 GB peak, ~1.1 img/s
   (~29 s per step, ~104 min training per epoch); with search (epochs 2-5) and the 512-tile test ~2.75 h per epoch,
   epoch 1 ~19:30, epoch 5 ~06:45 on Nov 9.
+- 2026-11-08 19:34: cdd6_ft384 **epoch 1 (384-px crops): 28.27 / 0.8895** (512-px tiles), vs 28.27 / 0.8882 for the
+  256-px epoch 8 it started from (same mean, SSIM +0.0013): low 26.02, haze 32.15 (-0.16), rain 32.68 (-0.62),
+  haze+rain 29.22 (+0.33), low+haze 24.74 (+0.38), low+rain 24.83 (+0.14). Training 106 min per epoch (1.1 img/s,
+  6.0 GB); the 512-tile test 31 min. Epoch 2 (first with the mix search) ~22:20.
