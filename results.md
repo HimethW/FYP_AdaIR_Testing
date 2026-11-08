@@ -865,3 +865,38 @@ restored in 256-px tiles (the setting chosen on held-out scenes in A27). PSNR pe
   help much.
 - Gap to EvoIR at epoch 8 is spread over all classes (-1.2 to -1.9 dB). SSIM is close to OneRestore's (-0.003).
 - Path so far (6-class mean): 128-px stage, whole image 26.32 -> 256-px tiles 27.10 -> 256-px crops 27.63.
+
+### A29. CDD-11: test-time tile size and flips for the 256-px model (cdd6_ft256 epoch 8, 2026-11-08)
+
+The model trained on 256-px crops was tested in 256-px tiles (chosen for the 128-px model in A27). Re-chosen on 20
+held-out training scenes per class (never the test set); x8 = the 8 flips / 90-degree rotations of every tile,
+undone and averaged (geometric self-ensemble). PSNR, OneRestore protocol, TF32.
+
+| Setting (held-out scenes) | low | haze | rain | haze+rain | low+haze | low+rain | mean (PSNR / SSIM) |
+|---|---|---|---|---|---|---|---|
+| Whole image | 26.41 | 32.68 | 33.87 | 28.89 | 22.73 | 23.81 | 28.07 / 0.8835 |
+| Tiles 256 | 26.37 | 33.45 | 33.25 | 29.50 | 23.91 | 23.76 | 28.37 / 0.8885 |
+| Tiles 384 | 26.39 | 34.94 | 33.67 | 29.75 | 23.78 | 23.86 | 28.73 / 0.8885 |
+| Tiles 512 | 26.41 | 35.18 | 33.79 | 29.89 | 23.72 | 23.90 | 28.81 / 0.8880 |
+| Tiles 640 | 26.40 | 34.27 | 33.79 | 29.48 | 23.30 | 23.86 | 28.52 / 0.8863 |
+| Tiles 256 + x8 | 26.42 | 33.75 | 33.40 | 29.70 | 24.06 | 23.88 | 28.53 / 0.8908 |
+| Tiles 384 + x8 | 26.45 | 35.18 | 33.88 | 29.93 | 23.93 | 23.98 | 28.89 / 0.8907 |
+| **Tiles 512 + x8** | 26.47 | 35.48 | 34.08 | 30.03 | 23.88 | 24.03 | **28.99 / 0.8903** |
+
+Full CDD-11 test (200 per class), cdd6_ft256 epoch 8:
+
+| | low | haze | rain | haze+rain | low+haze | low+rain | mean (PSNR / SSIM) |
+|---|---|---|---|---|---|---|---|
+| Tiles 256 (per-epoch test, A28) | 25.90 | 30.46 | 32.13 | 28.15 | 24.50 | 24.63 | 27.63 / 0.8896 |
+| **Tiles 512** | 26.04 | 32.31 | 33.30 | 28.89 | 24.36 | 24.69 | **28.27 / 0.8882** |
+| EvoIR (published) | 27.06 | 32.24 | 34.03 | 29.76 | 25.92 | 26.02 | 29.17 / 0.898 |
+| OneRestore (published) | 26.48 | 32.52 | 33.40 | 29.99 | 25.79 | 25.58 | 28.96 / 0.893 |
+
+- **28.27 dB without flips: above the 28 dB target**; -0.91 vs EvoIR, -0.69 vs OneRestore. Haze (32.31) is now level
+  with EvoIR (32.24), rain (33.30) close to OneRestore (33.40); the gap is in the three low-light classes and
+  haze+rain.
+- The model trained on bigger crops prefers bigger tiles: best tile 256 for the 128-px model, 512 for the 256-px
+  model; the whole image is worst for both. 512 vs 256 on the test: +0.64 (held-out +0.44); haze +1.85, rain +1.17,
+  haze+rain +0.74.
+- Flips (x8) add +0.16 to +0.18 on the held-out scenes at every tile size (8x the compute). Not run on the full test
+  for this model (saves 4 h): it is run once on the final model after the 384-px stage.

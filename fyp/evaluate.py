@@ -172,11 +172,13 @@ def run_model(model, x, mult=16, max_pixels=2_600_000, tile=1024, overlap=64):
 class Tiled(torch.nn.Module):
     """Runs `net` on tile x tile pieces of the image (tile // 4 overlap, the same placement and blending weights as
     run_model's tiling), `batch` pieces per forward. The model is trained on small crops and removes haze better on
-    pieces of about that size than on a whole 1080 x 720 image (results.md A26 / A27)."""
+    pieces of about that size than on a whole 1080 x 720 image (results.md A26 / A27).
+    batch=None: as many pieces as 8 tiles of 256 px (8 / 3 / 2 for 256 / 384 / 512), so it fits on a 16 GB GPU."""
 
-    def __init__(self, net, tile=256, batch=8):
+    def __init__(self, net, tile=256, batch=None):
         super().__init__()
-        self.net, self.tile, self.batch = net, tile, batch
+        self.net, self.tile = net, tile
+        self.batch = batch or max(1, 8 * 256 * 256 // (tile * tile))
 
     @torch.no_grad()
     def forward(self, x):

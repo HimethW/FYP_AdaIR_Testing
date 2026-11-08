@@ -904,3 +904,15 @@ OneRestore, equal images per class. First on Elgin, then (user) "dont use elgin 
   low+haze 23.88, low+rain 24.03) = best held-out -> chosen. Full CDD-11 test, cdd6_ft256 epoch 8, once each:
   512-px tiles (no flips; the like-for-like number vs EvoIR / OneRestore) and 512-px tiles + x8 flips
   (runs/cdd6_infer/test_ft256_ep08_tile512.json). Expected ~17:15 and ~21:20.
+- 2026-11-08 17:03: user: "do the best way". Plan changed to save 4 h: the full test stops after 512-px tiles
+  without flips; the x8 run on cdd6_ft256 epoch 8 is skipped (its held-out gain is +0.18 at 512 px), and the 384-px
+  training (scripts/run_cdd6_384.sh, per-epoch test in 512-px tiles) starts right after (scratchpad chain script).
+  At the end: best epoch -> tile size re-checked on held-out scenes -> one full test, with and without x8.
+  `Tiled(batch=None)` now picks the tiles per forward from the tile size (8 / 3 / 2 for 256 / 384 / 512).
+- 2026-11-08 17:14: **full CDD-11 test, cdd6_ft256 epoch 8, 512-px tiles, no flips: 28.27 / 0.8882** (above the
+  28 dB target): low 26.04, haze 32.31, rain 33.30, haze+rain 28.89, low+haze 24.36, low+rain 24.69; -0.91 vs EvoIR,
+  -0.69 vs OneRestore. results.md A29. The chain script's process check failed (/proc cmdline is NUL-separated), so
+  the sweep was stopped by hand (PID, after the 512 JSON was written) at 17:16; the chain then started the training.
+- 2026-11-08 17:16: **runs/cdd6_ft384** started (384-px crops, 5 epochs, --grad_ckpt): 5.7 GB peak, ~1.1 img/s
+  (~29 s per step, ~104 min training per epoch); with search (epochs 2-5) and the 512-tile test ~2.75 h per epoch,
+  epoch 1 ~19:30, epoch 5 ~06:45 on Nov 9.

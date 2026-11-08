@@ -45,7 +45,8 @@ def main():
     p.add_argument("--limit", type=int, default=None)
     p.add_argument("--fp32", action="store_true", help="true fp32 (default: TF32, as the per-epoch test)")
     p.add_argument("--workers", type=int, default=8)
-    p.add_argument("--tile_batch", type=int, default=8, help="tiles per forward (1 = one at a time)")
+    p.add_argument("--tile_batch", type=int, default=0,
+                   help="tiles per forward (0 = as many as 8 tiles of 256 px; 1 = one at a time)")
     p.add_argument("--out", required=True)
     args = p.parse_args()
 
