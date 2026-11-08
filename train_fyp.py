@@ -52,12 +52,14 @@ import random
 import signal
 import sys
 import time
+import types
 from collections import Counter
 
 import numpy as np
 import torch
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel
+from torch.utils.checkpoint import checkpoint
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 from torch.utils.tensorboard import SummaryWriter
@@ -114,6 +116,8 @@ def get_args():
     p.add_argument("--cudnn_benchmark", action="store_true",
                    help="let cuDNN time its conv algorithms and keep the fastest (same fp32 precision, not bitwise "
                         "reproducible); default off")
+    p.add_argument("--grad_ckpt", action="store_true",
+                   help="recompute the transformer blocks in the backward pass: less memory, ~30%% slower, same result")
     p.add_argument("--ema", type=float, default=0.0, help="EMA decay, 0 = off (DCPT's configs use 0.999)")
     p.add_argument("--ema_warmup", action="store_true",
                    help="EMA decay min(ema, (1+t)/(10+t)) at step t (short runs: see the EMA class)")
@@ -229,6 +233,21 @@ def save(path, payload):
     os.replace(tmp, path)
 
 
+def _ckpt_forward(self, x):
+    f = type(self).forward
+    return checkpoint(f, self, x, use_reentrant=False) if torch.is_grad_enabled() else f(self, x)
+
+
+def grad_checkpointing(model):
+    """Recompute every transformer block in the backward pass instead of keeping its activations: far less memory
+    (needed for 384-px crops on a 16 GB GPU), ~30% more compute, the same gradients. Returns the number of blocks."""
+    from net.model import TransformerBlock
+    blocks = [m for m in model.modules() if isinstance(m, TransformerBlock)]
+    for m in blocks:
+        m.forward = types.MethodType(_ckpt_forward, m)
+    return len(blocks)
+
+
 def to_cpu(obj):
     """Deep copy of a (nested) state dict with every tensor cloned to the CPU."""
     if torch.is_tensor(obj):
@@ -308,6 +327,8 @@ def main():
     device = "cuda"
 
     model = build_model(args.variant, amp_safe=args.precision == "bf16").to(device)
+    if args.grad_ckpt:
+        log(f"gradient checkpointing: {grad_checkpointing(model)} transformer blocks recomputed in the backward pass")
     if args.init:
         _, missing, unexpected = load_weights(model, args.init, strict=False, backbone=args.init_backbone)
         log(f"init from {args.init}{' (backbone + para2 only)' if args.init_backbone else ''}: "

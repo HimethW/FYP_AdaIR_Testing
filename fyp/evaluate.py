@@ -203,6 +203,26 @@ class Tiled(torch.nn.Module):
         return out / weight
 
 
+class SelfEnsemble(torch.nn.Module):
+    """Test-time geometric self-ensemble (Lim et al., EDSR 2017): runs `net` on the input under `n` of the 8
+    flips / 90-degree rotations, undoes each one on the output and averages. Same weights, `n` times the compute.
+    Tiled(SelfEnsemble(net), 256) averages the 8 versions of every tile before blending the tiles."""
+
+    def __init__(self, net, n=8):
+        super().__init__()
+        self.net, self.n = net, n
+
+    @torch.no_grad()
+    def forward(self, x):
+        out = 0
+        for k in range(self.n):
+            flip, rot = k >= 4, k % 4
+            xt = torch.rot90(x.flip(-1) if flip else x, rot, (-2, -1))
+            y = torch.rot90(self.net(xt), -rot, (-2, -1))
+            out = out + (y.flip(-1) if flip else y)
+        return out / self.n
+
+
 @torch.no_grad()
 def evaluate(model, sets, names, device="cuda", protocol="adair", limit=None, save_dir=None, log=print, workers=0):
     """Returns {set: {"psnr", "ssim", "n", "per_image": {name: [psnr, ssim]}}}.

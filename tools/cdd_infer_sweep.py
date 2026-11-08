@@ -6,6 +6,7 @@ Settings (same weights, only the way the model is run changes):
   tileN           image cut into N-px tiles (N/4 overlap), restored separately, blended
   localN          channel attention on N-px windows (fyp/local_infer.py, TLC-style); convolutions see the whole image
   localN_aflb     + the frequency blocks (FFT, shape statistics) on the same windows
+  tileN_x8        tiles, each restored under the 8 flips / rotations and averaged (self-ensemble, 8x the compute)
 
   # choose: 20 held-out scenes per class
   python tools/cdd_infer_sweep.py --ckpt runs/cdd6_ft/epochs/epoch_10.pt --sets cdd6val --limit 20 --out sweep.json
@@ -15,6 +16,7 @@ Settings (same weights, only the way the model is run changes):
 import argparse
 import json
 import os
+import re
 import sys
 import time
 
@@ -22,13 +24,14 @@ import numpy as np
 import torch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from fyp.evaluate import Tiled, evaluate, resolve, test_sets  # noqa: E402
+from fyp.evaluate import SelfEnsemble, Tiled, evaluate, resolve, test_sets  # noqa: E402
 from fyp.local_infer import local_inference  # noqa: E402
 from fyp.models import build_model  # noqa: E402
 
 SETTINGS = {
     "full": {},
     "tile256": {"tile": 256}, "tile384": {"tile": 384}, "tile512": {"tile": 512},
+    "tile256_x8": {"tile": 256, "tta": 8}, "tile384_x8": {"tile": 384, "tta": 8}, "tile512_x8": {"tile": 512, "tta": 8},
     "local192": {"base": 192}, "local256": {"base": 256}, "local384": {"base": 384},
     "local256_aflb": {"base": 256, "aflb": True}, "local384_aflb": {"base": 384, "aflb": True},
 }
@@ -38,7 +41,7 @@ def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--ckpt", required=True)
     p.add_argument("--sets", nargs="+", default=["cdd6val"])
-    p.add_argument("--settings", nargs="+", default=list(SETTINGS))
+    p.add_argument("--settings", nargs="+", default=list(SETTINGS), help="names above, or any tileN / tileN_xK")
     p.add_argument("--limit", type=int, default=None)
     p.add_argument("--fp32", action="store_true", help="true fp32 (default: TF32, as the per-epoch test)")
     p.add_argument("--workers", type=int, default=8)
@@ -56,10 +59,12 @@ def main():
     res.setdefault("meta", {"ckpt": args.ckpt, "epoch": ck.get("epoch"), "sets": names, "limit": args.limit,
                             "precision": "fp32" if args.fp32 else "tf32", "protocol": "onerestore"})
     for s in args.settings:
-        cfg = SETTINGS[s]
+        m = re.fullmatch(r"tile(\d+)(?:_x(\d+))?", s)
+        cfg = SETTINGS[s] if s in SETTINGS else {"tile": int(m.group(1)), **({"tta": int(m.group(2))} if m.group(2) else {})}
         t0 = time.time()
         if "tile" in cfg:
-            r = evaluate(Tiled(net, cfg["tile"], args.tile_batch), sets, names, protocol="onerestore", limit=args.limit,
+            inner = SelfEnsemble(net, cfg["tta"]) if cfg.get("tta") else net
+            r = evaluate(Tiled(inner, cfg["tile"], args.tile_batch), sets, names, protocol="onerestore", limit=args.limit,
                          workers=args.workers, log=lambda *a: None)
         else:
             with local_inference(net, base=cfg.get("base", 10 ** 6), aflb=cfg.get("aflb", False)):

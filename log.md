@@ -882,3 +882,25 @@ OneRestore, equal images per class. First on Elgin, then (user) "dont use elgin 
   31.87, haze+rain 28.17, low+haze 24.52, low+rain 24.67). **Best: epoch 8, 27.63 / 0.8896** (-1.54 vs EvoIR, -1.33
   vs OneRestore, 0.37 below 28 dB); epochs 8-10 within 0.04 dB (levelled off). Final table in results.md A28.
   GPU free. Next steps wait for the user (bigger crops / test-time flips, the latter only with the user's OK).
+- 2026-11-08 15:10: user: do both next steps (bigger crops + test-time flips). qbits has one 16 GB GPU (RTX 4080), so
+  they run one after the other.
+  - fyp/evaluate.py `SelfEnsemble(net, n=8)`: the 8 flips / 90-degree rotations, each undone on the output, averaged
+    (geometric self-ensemble, Lim et al. 2017). Checks: identity net -> max diff 1.2e-7; n=1 == plain (diff 0).
+    Tiled(SelfEnsemble(net), 256): 11.3 s per 1080x720 image vs 1.4 s (full test ~3.75 h).
+    tools/cdd_infer_sweep.py settings tile256_x8 / tile384_x8.
+  - train_fyp.py `--grad_ckpt`: the 44 transformer blocks are recomputed in the backward pass (gradients equal to
+    4e-7); a 384-px crop needs 5.3 GB for forward + backward instead of not fitting. scripts/run_cdd6_384.sh: from
+    cdd6_ft256/last.pt, 384-px crops, 5 epochs, lr 3e-5 -> 1e-6, mix from a = 0.816 (the 256-px stage's last).
+  - 15:13: held-out check (20 scenes per class, cdd6val) of cdd6_ft256 epoch 8: tiles 256 / 384, each plain and x8.
+    Rule fixed beforehand: the best held-out mean is the setting used on the test.
+- 2026-11-08 16:09: held-out check, cdd6_ft256 epoch 8 (20 scenes per class, PSNR mean / SSIM):
+  tiles 256 28.374 / 0.8885, **384 28.732** / 0.8885, 256 x8 28.533 / 0.8908, **384 x8 28.892** / 0.8907.
+  The 256-px-trained model prefers bigger tiles (+0.36 at 384), and the flips add +0.16 at both sizes. Because 384
+  beat 256, also checked (held-out only) 512 28.814 / 0.8880 (best plain), 640 28.517, whole image 28.066 (640 needs
+  --tile_batch 2 on 16 GB). Peak at 512 -> 512 x8 being measured (--tile_batch 3; batching does not change results).
+  Then: plain + x8 at the chosen tile size, each once on the full test (x8 ~4 h), before the 384-px training.
+  tools/cdd_infer_sweep.py takes any tileN / tileN_xK.
+- 2026-11-08 16:44: held-out 512 x8: **28.994** / 0.8903 (low 26.47, haze 35.48, rain 34.08, haze+rain 30.03,
+  low+haze 23.88, low+rain 24.03) = best held-out -> chosen. Full CDD-11 test, cdd6_ft256 epoch 8, once each:
+  512-px tiles (no flips; the like-for-like number vs EvoIR / OneRestore) and 512-px tiles + x8 flips
+  (runs/cdd6_infer/test_ft256_ep08_tile512.json). Expected ~17:15 and ~21:20.
