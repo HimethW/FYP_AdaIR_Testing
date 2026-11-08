@@ -929,3 +929,7 @@ OneRestore, equal images per class. First on Elgin, then (user) "dont use elgin 
 - 2026-11-09 03:11: cdd6_ft384 **epoch 4: 28.55 / 0.8903** (+0.05, best so far): low 26.14, haze 33.05, rain 33.02,
   haze+rain 29.42, low+haze 24.80, low+rain 24.86. -0.41 vs OneRestore, -0.63 vs EvoIR. Mix search a 1.0 -> 0.844 at
   step 642. Epoch 5 (last) ~05:50.
+- 2026-11-09 03:20: scripts/cdd6_final.sh started (waits for cdd6_ft384 to finish): best epoch by the per-epoch
+  test -> held-out tiles 384 / 512 / 640 / 720 -> chosen tile once on the full test without (if not 512) and with x8
+  flips. Log runs/cdd6_final/chain.log. Selection logic dry-checked on the current files (epoch 4; tile 512 for the
+  256-px model's held-out file).
