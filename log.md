@@ -863,3 +863,6 @@ OneRestore, equal images per class. First on Elgin, then (user) "dont use elgin 
 - 2026-11-08 07:13: cdd6_ft256 **epoch 4: 27.47 / 0.8884** (+0.09, best so far): low 25.86, haze 30.20 (-0.13),
   rain 31.85 (+0.44, partly back from epoch 3's drop), haze+rain 27.90 (+0.11), low+haze 24.42 (+0.10), low+rain
   24.60. Mix search a 0.9051 -> 0.8535 at step 642. 0.53 below 28 dB, 6 epochs to go.
+- 2026-11-08 08:26: cdd6_ft256 **epoch 5: 27.46 / 0.8885** (-0.01; epoch 4 stays best by PSNR): low 25.90, haze 30.04
+  (-0.16), rain 31.79, haze+rain 27.95 (+0.05), low+haze 24.46 (+0.04), low+rain 24.63. Mix search a 0.8535 -> 0.8687
+  at step 856. 0.54 below 28 dB, 5 epochs to go (lr now about halfway down the cosine).
