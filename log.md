@@ -857,3 +857,6 @@ OneRestore, equal images per class. First on Elgin, then (user) "dont use elgin 
 - 2026-11-08 04:47: cdd6_ft256 **epoch 2: 27.38 / 0.8873** (+0.10): low 25.84, haze 30.00 (+0.50), rain 32.11,
   haze+rain 27.57, low+haze 24.25, low+rain 24.52; only haze moved. (Epoch 2 includes the pause / resume at step 287
   with the 10-epoch schedule.)
+- 2026-11-08 06:00: cdd6_ft256 **epoch 3: 27.38 / 0.8878** (+0.00 PSNR, +0.0005 SSIM): low 25.88, haze 30.33 (+0.33),
+  rain 31.41 (-0.70), haze+rain 27.79 (+0.22), low+haze 24.32, low+rain 24.58. Gains on haze / haze+rain cancelled by
+  rain. The mix search moved a 1.0 -> 0.9051 at step 428 (start of epoch 3). Still 0.62 below 28 dB, 7 epochs to go.
