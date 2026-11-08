@@ -878,3 +878,7 @@ OneRestore, equal images per class. First on Elgin, then (user) "dont use elgin 
 - 2026-11-08 13:18: cdd6_ft256 **epoch 9: 27.59 / 0.8897** (-0.04 PSNR, +0.0001 SSIM; epoch 8 stays best by PSNR):
   low 25.92, haze 30.46, rain 31.86 (-0.27), haze+rain 28.14, low+haze 24.51, low+rain 24.66. Mix search kept
   a = 0.6394 at step 1712. Last epoch (10) ~14:32.
+- 2026-11-08 14:37: cdd6_ft256 **finished** (2,140 steps). Epoch 10: 27.59 / 0.8896 (low 25.92, haze 30.41, rain
+  31.87, haze+rain 28.17, low+haze 24.52, low+rain 24.67). **Best: epoch 8, 27.63 / 0.8896** (-1.54 vs EvoIR, -1.33
+  vs OneRestore, 0.37 below 28 dB); epochs 8-10 within 0.04 dB (levelled off). Final table in results.md A28.
+  GPU free. Next steps wait for the user (bigger crops / test-time flips, the latter only with the user's OK).

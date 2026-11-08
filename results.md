@@ -833,3 +833,35 @@ Full CDD-11 test (200 per class), epoch 10:
 - Making the frequency blocks local changes nothing: the whole-image effect comes from the channel attention.
 - The gain on the test (+0.79) is smaller than on the held-out scenes (+1.15). Still 0.9 dB below the 28 dB target,
   so training continues on 256-px crops (runs/cdd6_ft256).
+
+### A28. CDD-11: training continued on 256-px crops, 10 epochs (runs/cdd6_ft256, finished 2026-11-08 14:37)
+
+Continued from the 128-px stage (runs/cdd6_ft, 10.5 epochs) on 256-px crops for 10 more epochs (20.5 in all).
+Tested after every epoch on the full CDD-11 test (200 images per class, OneRestore protocol, EMA weights, TF32),
+restored in 256-px tiles (the setting chosen on held-out scenes in A27). PSNR per class:
+
+| | low | haze | rain | haze+rain | low+haze | low+rain | mean (PSNR / SSIM) |
+|---|---|---|---|---|---|---|---|
+| Start (128-px stage, epoch 10) | 25.83 | 29.61 | 32.12 | 27.05 | 23.62 | 24.38 | 27.10 / 0.8838 |
+| epoch 1 | 25.82 | 29.50 | 32.03 | 27.60 | 24.23 | 24.51 | 27.28 / 0.8871 |
+| epoch 2 | 25.84 | 30.00 | 32.11 | 27.57 | 24.25 | 24.52 | 27.38 / 0.8873 |
+| epoch 3 | 25.88 | 30.33 | 31.41 | 27.79 | 24.32 | 24.58 | 27.38 / 0.8878 |
+| epoch 4 | 25.86 | 30.20 | 31.85 | 27.90 | 24.42 | 24.60 | 27.47 / 0.8884 |
+| epoch 5 | 25.90 | 30.04 | 31.79 | 27.95 | 24.46 | 24.63 | 27.46 / 0.8885 |
+| epoch 6 | 25.88 | 30.19 | 31.83 | 28.09 | 24.49 | 24.62 | 27.52 / 0.8889 |
+| epoch 7 | 25.88 | 30.35 | 32.01 | 28.07 | 24.50 | 24.62 | 27.57 / 0.8891 |
+| **epoch 8 (best)** | 25.90 | 30.46 | 32.13 | 28.15 | 24.50 | 24.63 | **27.63 / 0.8896** |
+| epoch 9 | 25.92 | 30.46 | 31.86 | 28.14 | 24.51 | 24.66 | 27.59 / 0.8897 |
+| epoch 10 | 25.92 | 30.41 | 31.87 | 28.17 | 24.52 | 24.67 | 27.59 / 0.8896 |
+| EvoIR (published) | 27.06 | 32.24 | 34.03 | 29.76 | 25.92 | 26.02 | 29.17 / 0.898 |
+| OneRestore (published) | 26.48 | 32.52 | 33.40 | 29.99 | 25.79 | 25.58 | 28.96 / 0.893 |
+
+- Best epoch by mean PSNR (smallest gap to both published methods): **epoch 8, 27.63 / 0.8896**, i.e. -1.54 dB /
+  -0.008 vs EvoIR and -1.33 dB / -0.003 vs OneRestore; 0.37 dB below the 28 dB target.
+  Weights: runs/cdd6_ft256/epochs/epoch_08.pt (EMA).
+- 256-px crops added +0.53 dB over the 128-px stage, mostly in the three haze classes (haze +0.85, haze+rain +1.10,
+  low+haze +0.88); low (+0.07) and low+rain (+0.25) hardly moved; rain wobbles by up to 0.7 dB between epochs.
+- The run levelled off after epoch 8 (epochs 8-10 within 0.04 dB), so more epochs at this crop size are unlikely to
+  help much.
+- Gap to EvoIR at epoch 8 is spread over all classes (-1.2 to -1.9 dB). SSIM is close to OneRestore's (-0.003).
+- Path so far (6-class mean): 128-px stage, whole image 26.32 -> 256-px tiles 27.10 -> 256-px crops 27.63.
