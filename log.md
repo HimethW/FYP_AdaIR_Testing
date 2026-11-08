@@ -920,3 +920,6 @@ OneRestore, equal images per class. First on Elgin, then (user) "dont use elgin 
   256-px epoch 8 it started from (same mean, SSIM +0.0013): low 26.02, haze 32.15 (-0.16), rain 32.68 (-0.62),
   haze+rain 29.22 (+0.33), low+haze 24.74 (+0.38), low+rain 24.83 (+0.14). Training 106 min per epoch (1.1 img/s,
   6.0 GB); the 512-tile test 31 min. Epoch 2 (first with the mix search) ~22:20.
+- 2026-11-08 22:06: cdd6_ft384 **epoch 2: 28.51 / 0.8899** (+0.24, best so far): low 26.09, **haze 33.09** (+0.94;
+  above EvoIR 32.24 and OneRestore 32.52), rain 33.06 (+0.38), haze+rain 29.31 (+0.09), low+haze 24.72, low+rain
+  24.80. -0.45 vs OneRestore, -0.66 vs EvoIR. Epoch 3 ~00:50.
