@@ -948,3 +948,9 @@ OneRestore, equal images per class. First on Elgin, then (user) "dont use elgin 
   generator, band attention, size), training (DCPT, losses, loss-mix search, both experiments' schedules, CDD-11
   progressive crops), testing (protocols, tiles, x8 self-ensemble) and results (all-in-one vs baseline, CDD-11 final),
   checked against the code and results.md.
+- 2026-11-09: TEACHER_QA.md added: answers to the paper questions on the teacher runs (CDD-11 class list = the 6
+  classes, low+haze+rain also left out; Model A all-in-one and Model B CDD-11 are separate models; data per epoch,
+  recipe vs the write-up, DCPT classes, GPU time, CDD-11 / AIO-3 / mixture tables, PSNR / SSIM protocols, what
+  ablations exist, teacher feature levels for the student, real learned shape parameters at epoch 20 from
+  results/meeting_10_25/mask_shapes_epoch20/shape_params.csv, figure files, checkpoint and eval commands). Numbers
+  taken from the saved JSON / CSV files; nothing new was run.
