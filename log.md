@@ -941,3 +941,6 @@ OneRestore, equal images per class. First on Elgin, then (user) "dont use elgin 
   384 px 28.64 / 0.8891, **512 px 29.07 / 0.8898** (best), 640 px 28.91 / 0.8888, 720 px 28.81 / 0.8884 -> tile 512
   stays (the per-epoch test already used it, so epoch 5 without flips = 28.57 / 0.8904). Full test with the x8 flips
   (tile512_x8) started 05:58, ~4-4.5 h -> runs/cdd6_final/test_ep5_tile512.json.
+- 2026-11-09 10:05: **final CDD-11 test, cdd6_ft384 epoch 5, tiles 512 + x8 flips: 28.75 / 0.8927** (4.1 h): low
+  26.17, haze 33.35, rain 33.35, haze+rain 29.75, low+haze 24.90, low+rain 24.95. -0.21 / -0.0003 vs OneRestore
+  (SSIM level), -0.42 / -0.0053 vs EvoIR. Without flips (like-for-like) 28.57 / 0.8904. results.md A30. qbits GPU free.

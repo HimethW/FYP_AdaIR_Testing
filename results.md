@@ -900,3 +900,48 @@ Full CDD-11 test (200 per class), cdd6_ft256 epoch 8:
   haze+rain +0.74.
 - Flips (x8) add +0.16 to +0.18 on the held-out scenes at every tile size (8x the compute). Not run on the full test
   for this model (saves 4 h): it is run once on the final model after the 384-px stage.
+
+### A30. CDD-11: training continued on 384-px crops, 5 epochs, and the final test (runs/cdd6_ft384, 2026-11-09)
+
+Same recipe as A28 on 384-px crops (batch 1 x 32, gradient checkpointing so it fits the 16 GB GPU), from cdd6_ft256
+epoch 10; fresh cosine 3e-5 -> 1e-6. EMA weights tested after every epoch on the full CDD-11 test in 512-px tiles,
+no flips. PSNR / SSIM, OneRestore protocol, TF32.
+
+| | low | haze | rain | haze+rain | low+haze | low+rain | mean (PSNR / SSIM) |
+|---|---|---|---|---|---|---|---|
+| Start: cdd6_ft256 ep 8, tiles 512 (A29) | 26.04 | 32.31 | 33.30 | 28.89 | 24.36 | 24.69 | 28.27 / 0.8882 |
+| Epoch 1 | 26.02 | 32.15 | 32.68 | 29.22 | 24.74 | 24.83 | 28.27 / 0.8895 |
+| Epoch 2 | 26.09 | 33.09 | 33.06 | 29.31 | 24.72 | 24.80 | 28.51 / 0.8899 |
+| Epoch 3 | 26.12 | 32.95 | 32.93 | 29.37 | 24.77 | 24.83 | 28.50 / 0.8900 |
+| Epoch 4 | 26.14 | 33.05 | 33.02 | 29.42 | 24.80 | 24.86 | 28.55 / 0.8903 |
+| **Epoch 5** | 26.14 | 33.07 | 33.12 | 29.43 | 24.81 | 24.85 | **28.57 / 0.8904** |
+
+Tile size re-chosen for epoch 5 on 20 held-out training scenes per class (never the test set):
+
+| Setting (held-out scenes) | low | haze | rain | haze+rain | low+haze | low+rain | mean (PSNR / SSIM) |
+|---|---|---|---|---|---|---|---|
+| Tiles 384 | 26.39 | 34.42 | 32.77 | 29.89 | 24.14 | 24.23 | 28.64 / 0.8891 |
+| **Tiles 512** | 26.43 | 35.61 | 33.74 | 30.19 | 24.20 | 24.24 | **29.07 / 0.8898** |
+| Tiles 640 | 26.43 | 35.09 | 33.83 | 29.99 | 23.90 | 24.22 | 28.91 / 0.8888 |
+| Tiles 720 | 26.43 | 34.72 | 33.85 | 29.65 | 23.76 | 24.42 | 28.81 / 0.8884 |
+
+Final model (cdd6_ft384 epoch 5), full CDD-11 test (200 per class), PSNR / SSIM:
+
+| | low | haze | rain | haze+rain | low+haze | low+rain | mean |
+|---|---|---|---|---|---|---|---|
+| **Ours, tiles 512** | 26.14 / 0.8294 | 33.07 / 0.9897 | 33.12 / 0.9626 | 29.43 / 0.9540 | 24.81 / 0.8169 | 24.85 / 0.7899 | **28.57 / 0.8904** |
+| **Ours, tiles 512 + x8 flips** | 26.17 / 0.8308 | 33.35 / 0.9903 | 33.35 / 0.9647 | 29.75 / 0.9573 | 24.90 / 0.8192 | 24.95 / 0.7940 | **28.75 / 0.8927** |
+| EvoIR (published) | 27.06 / 0.830 | 32.24 / 0.991 | 34.03 / 0.970 | 29.76 / 0.965 | 25.92 / 0.824 | 26.02 / 0.806 | 29.17 / 0.898 |
+| OneRestore (published) | 26.48 / 0.826 | 32.52 / 0.990 | 33.40 / 0.964 | 29.99 / 0.957 | 25.79 / 0.822 | 25.58 / 0.799 | 28.96 / 0.893 |
+
+- **Like-for-like (no flips): 28.57 / 0.8904**, above the 28 dB target; -0.39 / -0.0026 vs OneRestore, -0.60 /
+  -0.0072 vs EvoIR. The 384-px stage added +0.30 dB / +0.0022 over the 256-px model (both in 512-px tiles).
+- **With x8 flips: 28.75 / 0.8927**; -0.21 dB vs OneRestore with SSIM level (-0.0003), -0.42 / -0.0053 vs EvoIR.
+  Flips add +0.18 dB / +0.0023, as on the held-out scenes (A29). EvoIR and OneRestore report no flips.
+- **Haze is the best of the three methods** (33.07 without flips, +0.55 vs OneRestore, +0.83 vs EvoIR). Rain is
+  -0.28 vs OneRestore without flips (-0.05 with). SSIM: low is above both, haze / rain / haze+rain level with
+  OneRestore.
+- **The remaining gap is the low-light mixes**: low+haze -0.98 and low+rain -0.73 vs OneRestore (no flips), low -0.34,
+  haze+rain -0.56. These are where a next step would go.
+- Path to the final model (no flips): 26.32 (stage 1, whole image) -> 27.10 (256 tiles) -> 27.63 (256-px crops) ->
+  28.27 (512 tiles) -> 28.57 (384-px crops).
