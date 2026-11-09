@@ -944,3 +944,7 @@ OneRestore, equal images per class. First on Elgin, then (user) "dont use elgin 
 - 2026-11-09 10:05: **final CDD-11 test, cdd6_ft384 epoch 5, tiles 512 + x8 flips: 28.75 / 0.8927** (4.1 h): low
   26.17, haze 33.35, rain 33.35, haze+rain 29.75, low+haze 24.90, low+rain 24.95. -0.21 / -0.0003 vs OneRestore
   (SSIM level), -0.42 / -0.0053 vs EvoIR. Without flips (like-for-like) 28.57 / 0.8904. results.md A30. qbits GPU free.
+- 2026-11-09: ARCHITECTURE.md added: plain-language documentation of our model (backbone, the 4 shaped bands, shape
+  generator, band attention, size), training (DCPT, losses, loss-mix search, both experiments' schedules, CDD-11
+  progressive crops), testing (protocols, tiles, x8 self-ensemble) and results (all-in-one vs baseline, CDD-11 final),
+  checked against the code and results.md.
