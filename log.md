@@ -937,3 +937,7 @@ OneRestore, equal images per class. First on Elgin, then (user) "dont use elgin 
   haze 33.07, rain 33.12 (+0.10), haze+rain 29.43, low+haze 24.81, low+rain 24.85. -0.39 / -0.0026 vs OneRestore,
   -0.60 / -0.0072 vs EvoIR. Stage total vs the 256-px start: +0.30 dB, +0.0022 SSIM. Training finished 05:45.
   scripts/cdd6_final.sh picked epoch 5 at 05:46 and started the held-out tile check (384 / 512 / 640 / 720).
+- 2026-11-09 05:58: held-out tile check for cdd6_ft384 epoch 5 (20 training scenes per class, not the test set):
+  384 px 28.64 / 0.8891, **512 px 29.07 / 0.8898** (best), 640 px 28.91 / 0.8888, 720 px 28.81 / 0.8884 -> tile 512
+  stays (the per-epoch test already used it, so epoch 5 without flips = 28.57 / 0.8904). Full test with the x8 flips
+  (tile512_x8) started 05:58, ~4-4.5 h -> runs/cdd6_final/test_ep5_tile512.json.
