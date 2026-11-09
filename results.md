@@ -939,8 +939,8 @@ Final model (cdd6_ft384 epoch 5), full CDD-11 test (200 per class), PSNR / SSIM:
 - **With x8 flips: 28.75 / 0.8927**; -0.21 dB vs OneRestore with SSIM level (-0.0003), -0.42 / -0.0053 vs EvoIR.
   Flips add +0.18 dB / +0.0023, as on the held-out scenes (A29). EvoIR and OneRestore report no flips.
 - **Haze is the best of the three methods** (33.07 without flips, +0.55 vs OneRestore, +0.83 vs EvoIR). Rain is
-  -0.28 vs OneRestore without flips (-0.05 with). SSIM: low is above both, haze / rain / haze+rain level with
-  OneRestore.
+  -0.28 vs OneRestore without flips (-0.05 with). SSIM with flips: low above OneRestore and level with EvoIR, haze /
+  rain / haze+rain level with OneRestore (without flips haze+rain is -0.003).
 - **The remaining gap is the low-light mixes**: low+haze -0.98 and low+rain -0.73 vs OneRestore (no flips), low -0.34,
   haze+rain -0.56. These are where a next step would go.
 - Path to the final model (no flips): 26.32 (stage 1, whole image) -> 27.10 (256 tiles) -> 27.63 (256-px crops) ->
