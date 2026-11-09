@@ -933,3 +933,7 @@ OneRestore, equal images per class. First on Elgin, then (user) "dont use elgin 
   test -> held-out tiles 384 / 512 / 640 / 720 -> chosen tile once on the full test without (if not 512) and with x8
   flips. Log runs/cdd6_final/chain.log. Selection logic dry-checked on the current files (epoch 4; tile 512 for the
   256-px model's held-out file).
+- 2026-11-09 05:45: cdd6_ft384 **epoch 5 (last): 28.57 / 0.8904** (+0.02, best of the 384-px stage): low 26.14,
+  haze 33.07, rain 33.12 (+0.10), haze+rain 29.43, low+haze 24.81, low+rain 24.85. -0.39 / -0.0026 vs OneRestore,
+  -0.60 / -0.0072 vs EvoIR. Stage total vs the 256-px start: +0.30 dB, +0.0022 SSIM. Training finished 05:45.
+  scripts/cdd6_final.sh picked epoch 5 at 05:46 and started the held-out tile check (384 / 512 / 640 / 720).
