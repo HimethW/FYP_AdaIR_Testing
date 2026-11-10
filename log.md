@@ -960,3 +960,11 @@ OneRestore, equal images per class. First on Elgin, then (user) "dont use elgin 
   ablation (none exists; the fine-tuned AdaIR baseline has no DCPT / FFT loss, so "isolate the frequency blocks" is
   not accurate), init wording (beta*Y, not identity), CDD-11 fairness note (6 vs 11 classes, 512 tiles), TF32 for
   CDD-11 vs "FP32", SSIM claim without an SSIM table, missing citations (frequency loss, focal loss, MS-SSIM).
+- 2026-11-10: PAPER_FILLINS.md added (user: fill the paper's missing teacher items): completed Table 3 (MoCE-IR-S
+  row: single 32.57, CDD-11 6-class 29.44 / .894 from MoCE-IR CVPR'25 Table 3, PSNR cross-checked in DVANet; BioIR
+  single 32.87, its CDD-11 still missing: only in the NeurIPS PDF, 11.7 MB, not downloaded), Table 4 with SSIM
+  (checked against the eval JSONs), Table 5 with PromptIR / MoCE-IR-S rows, new Sec. 5.3 paragraph (baseline had no
+  DCPT / FFT loss; single-task cost 0.30 vs 0.42; CDD-11 gap -0.39 OneRestore, -0.87 MoCE-IR-S), two options for the
+  untrained StaticIR-from-BandIR claims, wording fixes (init = AdaIR with frequency branch off; TF32 for CDD-11;
+  GPU-hours), CDD-11 recipe ablation table (A27-A30), a ~15 h per-component ablation plan (not started; needs OK),
+  BibTeX for the missing teacher / setup citations.
