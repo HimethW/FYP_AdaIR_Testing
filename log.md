@@ -954,3 +954,9 @@ OneRestore, equal images per class. First on Elgin, then (user) "dont use elgin 
   ablations exist, teacher feature levels for the student, real learned shape parameters at epoch 20 from
   results/meeting_10_25/mask_shapes_epoch20/shape_params.csv, figure files, checkpoint and eval commands). Numbers
   taken from the saved JSON / CSV files; nothing new was run.
+- 2026-11-10: reviewed the paper draft (Reviewer_copy.pdf, StaticIR + BandIR teacher) for teacher items. Teacher
+  numbers in Tables 3-5, Sec. 4.3, Fig. 3 and Sec. C match results.md (A24, A30, mask shapes epoch 20). Open teacher
+  items: student distilled from BandIR (4 red TODOs; not trained), Table 3 rows for MoCE-IR-S / BioIR, teacher
+  ablation (none exists; the fine-tuned AdaIR baseline has no DCPT / FFT loss, so "isolate the frequency blocks" is
+  not accurate), init wording (beta*Y, not identity), CDD-11 fairness note (6 vs 11 classes, 512 tiles), TF32 for
+  CDD-11 vs "FP32", SSIM claim without an SSIM table, missing citations (frequency loss, focal loss, MS-SSIM).
